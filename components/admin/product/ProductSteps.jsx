@@ -59,16 +59,21 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
     const [categories, setCategories] = useState([])
     const [categoriesData, setCategoriesData] = useState([])
 
-    // Load initial data for edit mode
+    // Load initial data for edit mode - wait for categories to be loaded
     useEffect(() => {
-        if (initialData && editMode) {
+        if (initialData && editMode && categoriesData.length > 0) {
             console.log('Edit mode initialData:', initialData)
+            console.log('Available categories:', categoriesData)
 
-            // Set product data immediately
+            // Find category index based on category name
+            const categoryIndex = categoriesData.findIndex(cat => cat.name === initialData.category)
+            console.log('Found category index:', categoryIndex, 'for category:', initialData.category)
+
+            // Set product data with correct category index
             setProductData(prev => ({
                 ...prev,
                 productId: initialData.id || null, // Product ID for update API
-                selectedCategory: 0, // Set to first category for now
+                selectedCategory: categoryIndex >= 0 ? categoryIndex : 0,
                 selectedSubcategory: initialData.subcategory || null,
                 selectedGender: initialData.gender || null,
                 selectedBrand: initialData.brand || null,
@@ -90,7 +95,7 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
                 setUnlockedStep(stepCount)
             }
         }
-    }, [initialData, editMode])
+    }, [initialData, editMode, categoriesData])
 
     // Fetch categories from API
     useEffect(() => {
