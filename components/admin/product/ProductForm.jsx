@@ -656,26 +656,49 @@ export default function ProductForm({
                 return productData.selectedTypeId || productData.selectedGlassTypeId || null
             }
 
-            // Build API payload with all required fields
-            const apiPayload = {
-                name: productData.productForm.name.trim(),
-                category: getCategoryId(),
-                subcategory: getSubcategoryId(),
-                brand: getBrandId(),
-                subbrand: getSubBrandId(),
-                model: getModelId(),
-                type: getTypeId(),
-                vendor: getVendorId(),
-                hsn: getHsnId(),
-                purchase_price: parseFloat(productData.productForm.purchasePrice),
-                selling_price: parseFloat(productData.productForm.sellingPrice),
-                min_selling_price: parseFloat(productData.productForm.minSellingPrice) || parseFloat(productData.productForm.sellingPrice),
-                min_qty_alert: parseInt(productData.productForm.minQtyAlert) || 5,
-                commission_type: productData.productForm.commissionType === "percent" ? "percentage" : "fixed",
-                commission_value: parseFloat(productData.productForm.commissionValue) || 0,
-                status: "active",
-                is_warranty_item: productData.hasWarranty || false,
-                quantities: quantities
+            // Determine if this is an update or create operation
+            const isUpdate = editMode && productData.productId
+
+            // Build API payload - for update, only send form values (not category/brand etc.)
+            let apiPayload = {}
+            
+            if (isUpdate) {
+                // For UPDATE: Only send editable form values, not category/brand/model etc.
+                apiPayload = {
+                    name: productData.productForm.name.trim(),
+                    vendor: getVendorId(),
+                    hsn: getHsnId(),
+                    purchase_price: parseFloat(productData.productForm.purchasePrice),
+                    selling_price: parseFloat(productData.productForm.sellingPrice),
+                    min_selling_price: parseFloat(productData.productForm.minSellingPrice) || parseFloat(productData.productForm.sellingPrice),
+                    min_qty_alert: parseInt(productData.productForm.minQtyAlert) || 5,
+                    commission_type: productData.productForm.commissionType === "percent" ? "percentage" : "fixed",
+                    commission_value: parseFloat(productData.productForm.commissionValue) || 0,
+                    is_warranty_item: productData.hasWarranty || false,
+                    quantities: quantities
+                }
+            } else {
+                // For CREATE: Send all fields including category/brand etc.
+                apiPayload = {
+                    name: productData.productForm.name.trim(),
+                    category: getCategoryId(),
+                    subcategory: getSubcategoryId(),
+                    brand: getBrandId(),
+                    subbrand: getSubBrandId(),
+                    model: getModelId(),
+                    type: getTypeId(),
+                    vendor: getVendorId(),
+                    hsn: getHsnId(),
+                    purchase_price: parseFloat(productData.productForm.purchasePrice),
+                    selling_price: parseFloat(productData.productForm.sellingPrice),
+                    min_selling_price: parseFloat(productData.productForm.minSellingPrice) || parseFloat(productData.productForm.sellingPrice),
+                    min_qty_alert: parseInt(productData.productForm.minQtyAlert) || 5,
+                    commission_type: productData.productForm.commissionType === "percent" ? "percentage" : "fixed",
+                    commission_value: parseFloat(productData.productForm.commissionValue) || 0,
+                    status: "active",
+                    is_warranty_item: productData.hasWarranty || false,
+                    quantities: quantities
+                }
             }
 
             // Add warranty period if warranty is enabled
@@ -690,8 +713,6 @@ export default function ProductForm({
 
             console.log('Sending product data to API:', apiPayload)
 
-            // Determine if this is an update or create operation
-            const isUpdate = editMode && productData.productId
             const apiUrl = isUpdate 
                 ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/update/${productData.productId}/`
                 : `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/create/`
