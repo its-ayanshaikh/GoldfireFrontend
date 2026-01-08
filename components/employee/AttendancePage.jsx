@@ -40,7 +40,6 @@ const AttendancePage = ({ user }) => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
 
         },
         credentials: 'omit',
@@ -104,7 +103,6 @@ const AttendancePage = ({ user }) => {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
-            'ngrok-skip-browser-warning': 'true' 
           },
           credentials: 'omit',
         })
@@ -413,7 +411,6 @@ const AttendancePage = ({ user }) => {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
-            'ngrok-skip-browser-warning': 'true' 
           },
           body: formData
         })
