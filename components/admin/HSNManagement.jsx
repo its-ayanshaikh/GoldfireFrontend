@@ -217,10 +217,10 @@ const HSNManagement = () => {
     }
 
     // Check if HSN code already exists
-    if (hsnCodes.some(hsn => hsn.code === newHSN.code)) {
-      alert("HSN Code already exists!")
-      return
-    }
+    // if (hsnCodes.some(hsn => hsn.code === newHSN.code)) {
+    //   alert("HSN Code already exists!")
+    //   return
+    // }
 
     try {
       await createHSN(newHSN)
