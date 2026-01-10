@@ -1,6 +1,6 @@
 {
-  "name": "My Business App",
-  "short_name": "Business App",
+  "name": "GoldFire Employee",
+  "short_name": "GoldFire",
   "description": "A complete business management application with POS, inventory, and admin features",
   "start_url": "/",
   "scope": "/",
