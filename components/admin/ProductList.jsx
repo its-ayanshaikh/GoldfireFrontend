@@ -10,8 +10,8 @@ import { Label } from "../ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog"
 import { Separator } from "../ui/separator"
-import ProductAdd from "./ProductAdd"
 import { useToast } from "../../hooks/use-toast"
+import { useNavigate } from "react-router-dom"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +28,7 @@ const currency = (n) => `₹${Number(n || 0).toLocaleString()}`
 
 export default function ProductList() {
   const { toast } = useToast()
+  const navigate = useNavigate()
 
   // State for API data
   const [products, setProducts] = useState([])
@@ -49,9 +50,10 @@ export default function ProductList() {
   const [searchInput, setSearchInput] = useState("")
   const [selectedBranch, setSelectedBranch] = useState("all")
   const [selectedCategory, setSelectedCategory] = useState("all")
-  const [expandedId, setExpandedId] = useState(null)
-  const [editProduct, setEditProduct] = useState(null)
   const [deleteProductId, setDeleteProductId] = useState(null)
+  const [selectedVariantProduct, setSelectedVariantProduct] = useState(null)
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [variantSearch, setVariantSearch] = useState("")
 
   // Barcode scanner detection for search
   const [searchBarcodeBuffer, setSearchBarcodeBuffer] = useState("")
@@ -243,67 +245,54 @@ export default function ProductList() {
 
 
 
-  const handleDelete = (productId) => {
+  const handleDelete = async (productId) => {
     console.log("[v0] Deleting product with ID:", productId)
-    setProducts((prev) => {
-      const newProducts = prev.filter((p) => p.id !== productId)
-      console.log("[v0] Products after deletion:", newProducts.length)
-      return newProducts
-    })
-    setDeleteProductId(null)
-    console.log("[v0] Delete dialog closed")
-  }
+    
+    try {
+      const token = localStorage.getItem('access_token')
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
+      
+      const response = await fetch(`${baseUrl}/api/product/delete/${productId}/`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        }
+      })
 
-  const openEdit = (product) => {
-    // Convert API product data to format expected by ProductAdd
-    const branchesWithQuantities = product.quantities
-      ?.filter(q => Number(q.qty || 0) > 0)
-      ?.map(q => q.branch_name)
-      ?.filter(Boolean) || []
-
-    // Convert quantities to name-based mapping
-    const nameBasedQuantities = {}
-    product.quantities?.forEach(q => {
-      nameBasedQuantities[q.branch_name] = q.qty
-    })
-
-    // Convert serial numbers from API format to form format
-    const serialNumbersList = product.serial_numbers?.map(sn => sn.serial_number) || 
-                              (product.sku ? [product.sku] : [])
-
-    const initialData = {
-      id: product.id, // Product ID for update API
-      category: product.category_name,
-      subcategory: product.subcategory_name,
-      gender: product.gender,
-      brand: product.brand_name,
-      subBrand: product.subbrand_name,
-      model: product.model_name,
-      glassType: product.type_name,
-      form: {
-        name: product.name,
-        hsn: product.hsn_code,
-        vendor: product.vendor_name,
-        minSellingPrice: product.min_selling_price,
-        purchasePrice: product.purchase_price,
-        sellingPrice: product.selling_price,
-        minQtyAlert: product.min_qty_alert,
-        commissionType: product.commission_type,
-        commissionValue: product.commission_value,
-        selectedBranches: branchesWithQuantities,
-        branchQuantities: nameBasedQuantities,
-        // Category-specific fields (if available in API response)
-        chargerType: product.charger_type,
-        cableType: product.cable_type,
-        capacity: product.capacity,
-        selectedModels: product.selected_models || [],
-        // Warranty-related fields
-        serialNumbers: serialNumbersList,
-        hasWarranty: product.is_warranty_item || false,
-        warrantyMonths: product.warranty_period || "",
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
       }
+
+      console.log('✅ Product deleted successfully')
+      
+      // Remove from local state
+      setProducts((prev) => {
+        const newProducts = prev.filter((p) => p.id !== productId)
+        console.log("[v0] Products after deletion:", newProducts.length)
+        return newProducts
+      })
+      
+      // Update total count
+      setTotalCount(prev => prev - 1)
+      
+      toast({
+        title: "Success",
+        description: "Product deleted successfully",
+      })
+      
+    } catch (error) {
+      console.error('❌ Error deleting product:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete product",
+        variant: "destructive",
+      })
+    } finally {
+      setDeleteProductId(null)
+      console.log("[v0] Delete dialog closed")
     }
-    setEditProduct(initialData)
   }
 
   // Barcode scanner detection for search
@@ -328,14 +317,6 @@ export default function ProductList() {
       console.log('Barcode scanned for search:', e.target.value)
     }
   }, [lastSearchKeyTime, searchBarcodeBuffer])
-
-  const saveEdit = (updatedData) => {
-    // Close the edit dialog
-    setEditProduct(null)
-
-    // Refresh the products list to show updated data
-    fetchProducts(currentPage)
-  }
 
   return (
     <div className="p-6 space-y-6">
@@ -402,8 +383,6 @@ export default function ProductList() {
                 <tr className="border-b border-border">
                   <th className="text-left p-3 font-medium text-foreground">Product</th>
                   <th className="text-left p-3 font-medium text-foreground">Brand</th>
-                  <th className="text-left p-3 font-medium text-foreground">Model</th>
-                  <th className="text-left p-3 font-medium text-foreground">HSN</th>
                   <th className="text-right p-3 font-medium text-foreground">
                     {selectedBranch === "all"
                       ? "Total Qty"
@@ -437,21 +416,12 @@ export default function ProductList() {
                         <td className="p-3">
                           <div className="font-medium text-foreground">{p.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            Vendor: {p.vendor_name || "-"} | Category: {p.category_name || "-"}
+                            Category: {p.category_name || "-"}
                           </div>
                         </td>
                         <td className="p-3 text-foreground">
                           <div className="font-medium">{p.brand_name || "-"}</div>
                         </td>
-                        <td className="p-3 text-foreground">
-                          <div className="font-medium">
-                            {p.subbrand_name && p.model_name
-                              ? `${p.subbrand_name} ${p.model_name}`
-                              : p.subbrand_name || p.model_name || "-"
-                            }
-                          </div>
-                        </td>
-                        <td className="p-3 text-foreground">{p.hsn_code}</td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <span className={`font-semibold ${low ? "text-destructive" : "text-foreground"}`}>{qty}</span>
@@ -463,12 +433,18 @@ export default function ProductList() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                              onClick={() => {
+                                if (p.is_variant) {
+                                  setSelectedVariantProduct(p)
+                                } else {
+                                  setSelectedProduct(p)
+                                }
+                              }}
                             >
                               <Eye className="w-4 h-4 mr-1" />
-                              {expandedId === p.id ? "Hide" : "View"}
+                              View
                             </Button>
-                            <Button variant="outline" size="sm" onClick={() => openEdit(p)}>
+                            <Button variant="outline" size="sm" onClick={() => navigate(`/admin/product/edit/${p.id}`)}>
                               <Edit className="w-4 h-4 mr-1" />
                               Edit
                             </Button>
@@ -528,49 +504,6 @@ export default function ProductList() {
                               </AlertDialogContent>
                             </AlertDialog>
                           </div>
-
-                          {expandedId === p.id && (
-                            <div className="mt-3 p-3 rounded-md bg-accent/40">
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div>
-                                  <Label className="text-muted-foreground">Purchase price</Label>
-                                  <div className="text-foreground">{currency(p.purchase_price)}</div>
-                                </div>
-                                <div>
-                                  <Label className="text-muted-foreground">Selling price</Label>
-                                  <div className="text-foreground">{currency(p.selling_price)}</div>
-                                </div>
-                                <div>
-                                  <Label className="text-muted-foreground">Minimum selling</Label>
-                                  <div className="text-foreground">{currency(p.min_selling_price)}</div>
-                                </div>
-                                <div>
-                                  <Label className="text-muted-foreground">Commission</Label>
-                                  <div className="text-foreground">
-                                    {p.commission_type === "fixed" ? "₹" : "%"} {p.commission_value}
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label className="text-muted-foreground">Min qty alert</Label>
-                                  <div className="text-foreground">{p.min_qty_alert ?? 0}</div>
-                                </div>
-                              </div>
-
-                              <Separator className="my-3" />
-
-                              <div className="space-y-2">
-                                <Label className="text-muted-foreground">Branch quantities</Label>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                  {p.quantities?.map((q, index) => (
-                                    <div key={index} className="p-2 rounded border border-border bg-card">
-                                      <div className="text-sm text-muted-foreground">{q.branch_name}</div>
-                                      <div className="font-medium text-foreground">{q.qty}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          )}
                         </td>
                       </tr>
                     )
@@ -609,20 +542,171 @@ export default function ProductList() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!editProduct} onOpenChange={(open) => !open && setEditProduct(null)}>
-        <DialogContent className="w-[98vw] h-[calc(100vh-1rem)] max-w-none max-h-none overflow-y-auto p-0 mx-[1vw] my-2 sm:w-[96vw] sm:h-[calc(100vh-2rem)] sm:mx-[2vw] sm:my-4">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Edit Product</DialogTitle>
+      {/* Pagination */}
+      {totalCount > 0 && (
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+          <div className="text-sm text-muted-foreground">
+            Page {currentPage} of {Math.ceil(totalCount / 20)} ({totalCount} items)
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrevPage}
+              disabled={!prevPageUrl || productsLoading}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNextPage}
+              disabled={!nextPageUrl || productsLoading}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Variants Modal */}
+      <Dialog open={!!selectedVariantProduct} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedVariantProduct(null)
+          setVariantSearch("")
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedVariantProduct?.name} - Variants & Models
+            </DialogTitle>
           </DialogHeader>
-          {editProduct && (
-            <ProductAdd
-              initialData={editProduct}
-              editMode={true}
-              onClose={() => setEditProduct(null)}
-              onSaved={(updatedData) => {
-                saveEdit(updatedData)
-              }}
-            />
+          
+          {selectedVariantProduct && selectedVariantProduct.variants && (
+            <div className="space-y-4">
+              {/* Search Input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Search by model or sub brand..."
+                  value={variantSearch}
+                  onChange={(e) => setVariantSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Filtered Variants */}
+              {selectedVariantProduct.variants
+                .filter(variant => {
+                  if (!variantSearch.trim()) return true
+                  const search = variantSearch.toLowerCase()
+                  const subBrandMatch = (variant.subbrand_name || "").toLowerCase().includes(search)
+                  const modelMatch = variant.models && Array.isArray(variant.models) && 
+                    variant.models.some(m => (m.name || "").toLowerCase().includes(search))
+                  return subBrandMatch || modelMatch
+                })
+                .map((variant, variantIdx) => (
+                  <div key={variantIdx} className="space-y-3 p-4 rounded border border-border bg-card">
+                    <div className="font-semibold text-foreground bg-primary/10 px-3 py-1.5 rounded w-fit">
+                      {variant.subbrand_name || "Sub Brand"}
+                    </div>
+                    
+                    {/* Models List */}
+                    <div className="pl-2">
+                      <div className="text-sm text-muted-foreground mb-2">Models:</div>
+                      <div className="font-medium text-foreground">
+                        {variant.models && Array.isArray(variant.models) && variant.models.length > 0 
+                          ? variant.models.map(m => m.name || m).join(", ")
+                          : "No models"
+                        }
+                      </div>
+                    </div>
+
+                    {/* Pricing Info */}
+                    <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Selling Price</div>
+                        <div className="font-medium text-foreground">₹{variant.selling_price || "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Min Price</div>
+                        <div className="font-medium text-foreground">₹{variant.minimum_selling_price || "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Min Qty</div>
+                        <div className="font-medium text-foreground">{variant.minimum_quantity || "-"}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              }
+
+              {/* No Results */}
+              {variantSearch.trim() && selectedVariantProduct.variants.filter(variant => {
+                const search = variantSearch.toLowerCase()
+                const subBrandMatch = (variant.subbrand_name || "").toLowerCase().includes(search)
+                const modelMatch = variant.models && Array.isArray(variant.models) && 
+                  variant.models.some(m => (m.name || "").toLowerCase().includes(search))
+                return subBrandMatch || modelMatch
+              }).length === 0 && (
+                <div className="text-center py-4 text-muted-foreground">
+                  No variants found for "{variantSearch}"
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Non-Variant Product Modal */}
+      <Dialog open={!!selectedProduct} onOpenChange={(open) => !open && setSelectedProduct(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedProduct?.name} - Details
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedProduct && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Category</div>
+                  <div className="font-medium text-foreground">{selectedProduct.category_name || "-"}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Brand</div>
+                  <div className="font-medium text-foreground">{selectedProduct.brand_name || "-"}</div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Selling Price</div>
+                  <div className="font-medium text-foreground text-lg">₹{selectedProduct.selling_price || "-"}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Min Selling Price</div>
+                  <div className="font-medium text-foreground text-lg">₹{selectedProduct.minimum_selling_price || "-"}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Min Quantity</div>
+                  <div className="font-medium text-foreground">{selectedProduct.minimum_quantity || "-"}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Status</div>
+                  <Badge variant={selectedProduct.status === "active" ? "default" : "secondary"}>
+                    {selectedProduct.status || "-"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -16,17 +16,17 @@ const BarcodePrinting = () => {
     // State
     const [categories, setCategories] = useState([])
     const [products, setProducts] = useState([])
-    const [branches, setBranches] = useState([])
+    const [purchaseHistory, setPurchaseHistory] = useState([]) // Purchase history for selected product
     
     const [selectedCategory, setSelectedCategory] = useState("")
     const [selectedProduct, setSelectedProduct] = useState("")
-    const [selectedBranch, setSelectedBranch] = useState("")
+    const [selectedPurchase, setSelectedPurchase] = useState("") // Selected purchase item
     const [quantity, setQuantity] = useState(1)
     
     // Loading states
     const [categoriesLoading, setCategoriesLoading] = useState(true)
     const [productsLoading, setProductsLoading] = useState(false)
-    const [branchesLoading, setBranchesLoading] = useState(true)
+    const [purchaseLoading, setPurchaseLoading] = useState(false)
     const [printing, setPrinting] = useState(false)
 
     // Fetch categories on mount
@@ -66,48 +66,13 @@ const BarcodePrinting = () => {
         fetchCategories()
     }, [])
 
-    // Fetch branches on mount
-    useEffect(() => {
-        const fetchBranches = async () => {
-            try {
-                const token = localStorage.getItem('access_token')
-                setBranchesLoading(true)
-                
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/branch/`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'omit',
-                })
-
-                if (response.ok) {
-                    const data = await response.json()
-                    setBranches(data.results || data)
-                } else {
-                    throw new Error('Failed to fetch branches')
-                }
-            } catch (error) {
-                console.error('Error fetching branches:', error)
-                toast({
-                    title: "Error",
-                    description: "Failed to load branches",
-                    variant: "destructive",
-                })
-            } finally {
-                setBranchesLoading(false)
-            }
-        }
-
-        fetchBranches()
-    }, [])
-
     // Fetch products when category changes
     useEffect(() => {
         if (!selectedCategory) {
             setProducts([])
             setSelectedProduct("")
+            setPurchaseHistory([])
+            setSelectedPurchase("")
             return
         }
 
@@ -116,6 +81,8 @@ const BarcodePrinting = () => {
                 const token = localStorage.getItem('access_token')
                 setProductsLoading(true)
                 setSelectedProduct("")
+                setPurchaseHistory([])
+                setSelectedPurchase("")
                 
                 const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/barcode/${selectedCategory}/products/`, {
                     method: 'GET',
@@ -147,6 +114,52 @@ const BarcodePrinting = () => {
 
         fetchProducts()
     }, [selectedCategory])
+
+    // Fetch purchase history when product changes
+    useEffect(() => {
+        if (!selectedProduct) {
+            setPurchaseHistory([])
+            setSelectedPurchase("")
+            return
+        }
+
+        const fetchPurchaseHistory = async () => {
+            try {
+                const token = localStorage.getItem('access_token')
+                setPurchaseLoading(true)
+                setSelectedPurchase("")
+                
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/barcode/${selectedProduct}/purchases/`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'omit',
+                })
+
+                if (response.ok) {
+                    const data = await response.json()
+                    console.log('Purchase history response:', data)
+                    // Response format: { status: true, product: {...}, count: X, data: [...] }
+                    setPurchaseHistory(data.data || [])
+                } else {
+                    throw new Error('Failed to fetch purchase history')
+                }
+            } catch (error) {
+                console.error('Error fetching purchase history:', error)
+                toast({
+                    title: "Error",
+                    description: "Failed to load purchase history",
+                    variant: "destructive",
+                })
+            } finally {
+                setPurchaseLoading(false)
+            }
+        }
+
+        fetchPurchaseHistory()
+    }, [selectedProduct])
 
     // Print barcodes function - optimized for 38mm x 38mm 2-ups thermal printer
     const printBarcodes = (barcodeData) => {
@@ -390,10 +403,10 @@ const BarcodePrinting = () => {
 
     // Handle print button click
     const handlePrint = async () => {
-        if (!selectedProduct || !selectedBranch || !quantity) {
+        if (!selectedProduct || !selectedPurchase || !quantity) {
             toast({
                 title: "Missing Fields",
-                description: "Please select product, branch and enter quantity",
+                description: "Please select product, purchase item and enter quantity",
                 variant: "destructive",
             })
             return
@@ -412,8 +425,11 @@ const BarcodePrinting = () => {
             const token = localStorage.getItem('access_token')
             setPrinting(true)
 
+            // Get selected purchase details
+            const purchaseItem = purchaseHistory.find(p => p.purchase_item_id.toString() === selectedPurchase)
+            
             const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/barcode/create/?product_id=${selectedProduct}&branch_id=${selectedBranch}`,
+                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/barcode/create/?product_id=${selectedProduct}&purchase_item_id=${selectedPurchase}`,
                 {
                     method: 'GET',
                     headers: {
@@ -461,9 +477,10 @@ const BarcodePrinting = () => {
     const handleReset = () => {
         setSelectedCategory("")
         setSelectedProduct("")
-        setSelectedBranch("")
+        setSelectedPurchase("")
         setQuantity(1)
         setProducts([])
+        setPurchaseHistory([])
     }
 
     return (
@@ -530,35 +547,51 @@ const BarcodePrinting = () => {
                             <SelectContent>
                                 {products.map((product) => (
                                     <SelectItem key={product.id} value={product.id.toString()}>
-                                        {product.name} - ₹{Number(product.selling_price || 0).toLocaleString()}
+                                        {product.brand} {product.name} 
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
 
-                    {/* Branch Selection */}
+                    {/* Purchase History Selection */}
                     <div className="space-y-2">
                         <Label className="flex items-center gap-2">
                             <Building2 className="h-4 w-4" />
-                            Branch
+                            Purchase Item (Variant / Vendor / Price)
                         </Label>
                         <Select
-                            value={selectedBranch}
-                            onValueChange={setSelectedBranch}
-                            disabled={branchesLoading}
+                            value={selectedPurchase}
+                            onValueChange={setSelectedPurchase}
+                            disabled={!selectedProduct || purchaseLoading}
                         >
                             <SelectTrigger className="w-full">
-                                <SelectValue placeholder={branchesLoading ? "Loading branches..." : "Select Branch"} />
+                                <SelectValue 
+                                    placeholder={
+                                        !selectedProduct 
+                                            ? "Select product first" 
+                                            : purchaseLoading 
+                                                ? "Loading purchase history..." 
+                                                : purchaseHistory.length === 0 
+                                                    ? "No purchase history found"
+                                                    : "Select Purchase Item"
+                                    } 
+                                />
                             </SelectTrigger>
                             <SelectContent>
-                                {branches.map((branch) => (
-                                    <SelectItem key={branch.id} value={branch.id.toString()}>
-                                        {branch.name}
+                                {purchaseHistory.map((purchase) => (
+                                    <SelectItem key={purchase.purchase_item_id} value={purchase.purchase_item_id.toString()}>
+                                        {purchase.variant ? `${purchase.variant.name} - ` : ''}
+                                        {purchase.vendor_name} - ₹{Number(purchase.selling_price || 0).toLocaleString()}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
+                        {purchaseHistory.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                                {purchaseHistory.length} purchase item(s) available
+                            </p>
+                        )}
                     </div>
 
                     {/* Quantity Input */}
@@ -584,7 +617,7 @@ const BarcodePrinting = () => {
                     <div className="flex gap-3 pt-4">
                         <Button
                             onClick={handlePrint}
-                            disabled={!selectedProduct || !selectedBranch || !quantity || printing}
+                            disabled={!selectedProduct || !selectedPurchase || !quantity || printing}
                             className="flex-1"
                         >
                             {printing ? (

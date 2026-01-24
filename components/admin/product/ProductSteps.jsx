@@ -1,15 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card"
-import { Button } from "../../ui/button"
-import { Building2, ChevronLeft, ChevronRight, Check } from "lucide-react"
+import { Building2, ChevronRight, Check } from "lucide-react"
 import CategorySelection from "./CategorySelection"
 import SubcategorySelection from "./SubcategorySelection"
 import GenderSelection from "./GenderSelection"
 import BrandSelection from "./BrandSelection"
-import SubBrandSelection from "./SubBrandSelection"
-import ModelSelection from "./ModelSelection"
 import GlassTypeSelection from "./GlassTypeSelection"
 import TypeSelection from "./TypeSelection"
 import ProductForm from "./ProductForm"
@@ -23,199 +19,172 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
         selectedSubcategory: null,
         selectedSubcategoryId: null,
         selectedGender: null,
-        selectedBrand: null,
-        selectedBrandId: null,
-        selectedSubBrand: null,
-        selectedSubBrandId: null,
-        selectedModel: null,
-        selectedModelId: null,
-        selectedGlassType: null,
-        selectedGlassTypeId: null,
         selectedType: null,
         selectedTypeId: null,
+        selectedGlassType: null,
+        selectedGlassTypeId: null,
+        selectedBrand: null,
+        selectedBrandId: null,
         productForm: {
             name: "",
             hsn: "",
-            vendor: "",
-            minSellingPrice: "",
-            purchasePrice: "",
             sellingPrice: "",
+            minSellingPrice: "",
             minQtyAlert: "",
-            commissionType: "fixed",
+            commissionType: "percent",
             commissionValue: "",
-            selectedBranches: [],
-            branchQuantities: {},
-            chargerType: "",
-            cableType: "",
-            capacity: "",
-            selectedModels: [],
         },
-        serialNumbers: [],
         hasWarranty: false,
-        warrantyMonths: ""
+        warrantyMonths: "",
+        // Product variants - model wise data (for Cover, Tuffun, Camera Ring)
+        variants: []
     })
 
     // Categories from API
     const [categories, setCategories] = useState([])
     const [categoriesData, setCategoriesData] = useState([])
-
-    // Load initial data for edit mode - wait for categories to be loaded
-    useEffect(() => {
-        if (initialData && editMode && categoriesData.length > 0) {
-            console.log('Edit mode initialData:', initialData)
-            console.log('Available categories:', categoriesData)
-
-            // Find category index based on category name
-            const categoryIndex = categoriesData.findIndex(cat => cat.name === initialData.category)
-            console.log('Found category index:', categoryIndex, 'for category:', initialData.category)
-
-            // Set product data with correct category index
-            setProductData(prev => ({
-                ...prev,
-                productId: initialData.id || null, // Product ID for update API
-                selectedCategory: categoryIndex >= 0 ? categoryIndex : 0,
-                selectedSubcategory: initialData.subcategory || null,
-                selectedGender: initialData.gender || null,
-                selectedBrand: initialData.brand || null,
-                selectedSubBrand: initialData.subBrand || null,
-                selectedModel: initialData.model || null,
-                selectedGlassType: initialData.glassType || null,
-                selectedType: initialData.type || null,
-                productForm: { ...prev.productForm, ...(initialData.form || {}) },
-                serialNumbers: initialData.form?.serialNumbers || [],
-                hasWarranty: initialData.form?.hasWarranty || false,
-                warrantyMonths: initialData.form?.warrantyMonths || ""
-            }))
-
-            // In edit mode, go directly to the Form step
-            if (initialData.category) {
-                const stepCount = getStepCountForCategory(initialData.category)
-                console.log('Setting step to:', stepCount, 'for category:', initialData.category)
-                setCurrentStep(stepCount) // Go to final Form step
-                setUnlockedStep(stepCount)
-            }
-        }
-    }, [initialData, editMode, categoriesData])
+    const [categoriesLoading, setCategoriesLoading] = useState(true)
 
     // Fetch categories from API
     useEffect(() => {
         const fetchCategories = async () => {
             try {
+                setCategoriesLoading(true)
+                const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
                 const token = localStorage.getItem('access_token')
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/categories/`, {
+                
+                console.log('🔥 Fetching categories from Django API...')
+                console.log('Base URL:', baseUrl)
+                console.log('Full API URL:', `${baseUrl}/api/product/categories/`)
+                console.log('Token exists:', !!token)
+                
+                const response = await fetch(`${baseUrl}/api/product/categories/`, {
                     method: 'GET',
                     headers: {
-                        'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json',
-                    },
-                    credentials: 'omit',
+                        ...(token && { 'Authorization': `Bearer ${token}` })
+                    }
                 })
-
-                if (response.ok) {
-                    const data = await response.json()
-                    setCategoriesData(data)
-                    setCategories(data.map(category => category.name))
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`)
                 }
+                
+                const data = await response.json()
+                console.log('✅ Categories API Response:', data)
+                console.log('📊 Total categories fetched:', data.length)
+                
+                // API returns array of objects with id and name (CategorySerializer format)
+                setCategoriesData(data)
+                setCategories(data.map(cat => cat.name))
+                
             } catch (error) {
-                console.error('Error fetching categories:', error)
+                console.error('❌ Error fetching categories from Django API:', error)
+                // Set empty arrays if API fails
+                setCategoriesData([])
+                setCategories([])
+            } finally {
+                setCategoriesLoading(false)
             }
         }
 
         fetchCategories()
     }, [])
 
+    // Load initial data for edit mode
+    useEffect(() => {
+        if (initialData && editMode && categoriesData.length > 0) {
+            const categoryIndex = categoriesData.findIndex(cat => cat.name === initialData.category)
+
+            console.log('🔄 Loading edit mode data:', {
+                subcategoryId: initialData.subcategoryId,
+                subcategory: initialData.subcategory,
+                variants: initialData.variants?.length
+            })
+
+            setProductData(prev => ({
+                ...prev,
+                productId: initialData.id || null,
+                selectedCategory: categoryIndex >= 0 ? categoryIndex : 0,
+                selectedSubcategory: initialData.subcategory || null,
+                selectedSubcategoryId: initialData.subcategoryId || null,
+                selectedGender: initialData.gender || null,
+                selectedType: initialData.type || null,
+                selectedTypeId: initialData.typeId || null,
+                selectedGlassType: initialData.glassType || null,
+                selectedGlassTypeId: initialData.glassTypeId || null,
+                selectedBrand: initialData.brand || null,
+                selectedBrandId: initialData.brandId || null,
+                productForm: { 
+                    ...prev.productForm, 
+                    ...(initialData.form || {}),
+                    name: initialData.form?.name || "",
+                    hsn: initialData.form?.hsn || "",
+                    sellingPrice: initialData.form?.sellingPrice || "",
+                    minSellingPrice: initialData.form?.minSellingPrice || "",
+                    minQtyAlert: initialData.form?.minQtyAlert || "",
+                    commissionType: initialData.form?.commissionType || "percent",
+                    commissionValue: initialData.form?.commissionValue || "",
+                },
+                hasWarranty: initialData.hasWarranty || initialData.form?.hasWarranty || false,
+                warrantyMonths: initialData.warrantyMonths || initialData.form?.warrantyMonths || "",
+                variants: initialData.variants || []
+            }))
+
+            if (initialData.category) {
+                const stepCount = getStepCountForCategory(initialData.category)
+                setCurrentStep(stepCount)
+                setUnlockedStep(stepCount)
+            }
+        }
+    }, [initialData, editMode, categoriesData])
+
     const updateProductData = (data) => {
         setProductData(prev => ({ ...prev, ...data }))
     }
 
-    // Clear subsequent step data when going back to earlier steps
     const clearSubsequentData = (fromStep) => {
         const clearedData = { ...productData }
 
-        // If changing category, clear everything
         if (fromStep <= 1) {
             clearedData.selectedSubcategory = null
             clearedData.selectedSubcategoryId = null
             clearedData.selectedGender = null
-            clearedData.selectedBrand = null
-            clearedData.selectedBrandId = null
-            clearedData.selectedSubBrand = null
-            clearedData.selectedSubBrandId = null
-            clearedData.selectedModel = null
-            clearedData.selectedModelId = null
-            clearedData.selectedGlassType = null
-            clearedData.selectedGlassTypeId = null
             clearedData.selectedType = null
             clearedData.selectedTypeId = null
-            clearedData.productForm = {
-                name: "",
-                hsn: "",
-                vendor: "",
-                minSellingPrice: "",
-                purchasePrice: "",
+            clearedData.selectedGlassType = null
+            clearedData.selectedGlassTypeId = null
+            clearedData.selectedBrand = null
+            clearedData.selectedBrandId = null
+            clearedData.productForm = { 
+                name: "", 
+                hsn: "", 
                 sellingPrice: "",
+                minSellingPrice: "",
                 minQtyAlert: "",
-                commissionType: "fixed",
+                commissionType: "percent",
                 commissionValue: "",
-                selectedBranches: [],
-                branchQuantities: {},
-                chargerType: "",
-                cableType: "",
-                capacity: "",
-                selectedModels: [],
             }
-            clearedData.serialNumbers = []
             clearedData.hasWarranty = false
             clearedData.warrantyMonths = ""
-        }
-        // If changing subcategory, clear brand and subsequent data
-        else if (fromStep <= 2) {
+            clearedData.variants = []
+        } else if (fromStep <= 2) {
+            clearedData.selectedGender = null
+            clearedData.selectedType = null
+            clearedData.selectedTypeId = null
+            clearedData.selectedGlassType = null
+            clearedData.selectedGlassTypeId = null
             clearedData.selectedBrand = null
             clearedData.selectedBrandId = null
-            clearedData.selectedSubBrand = null
-            clearedData.selectedSubBrandId = null
-            clearedData.selectedModel = null
-            clearedData.selectedModelId = null
-            clearedData.selectedGlassType = null
-            clearedData.selectedGlassTypeId = null
-            clearedData.selectedType = null
-            clearedData.selectedTypeId = null
-        }
-        // If changing gender, clear brand and subsequent data
-        else if (fromStep <= 3) {
+        } else if (fromStep <= 3) {
             clearedData.selectedBrand = null
             clearedData.selectedBrandId = null
-            clearedData.selectedSubBrand = null
-            clearedData.selectedSubBrandId = null
-            clearedData.selectedModel = null
-            clearedData.selectedModelId = null
-            clearedData.selectedGlassType = null
-            clearedData.selectedGlassTypeId = null
-            clearedData.selectedType = null
-            clearedData.selectedTypeId = null
-        }
-        // If changing brand, clear subbrand and subsequent data
-        else if (fromStep <= 4) {
-            clearedData.selectedSubBrand = null
-            clearedData.selectedSubBrandId = null
-            clearedData.selectedModel = null
-            clearedData.selectedModelId = null
-            clearedData.selectedGlassType = null
-            clearedData.selectedGlassTypeId = null
-            clearedData.selectedType = null
-            clearedData.selectedTypeId = null
-        }
-        // If changing subbrand, clear model and subsequent data
-        else if (fromStep <= 5) {
-            clearedData.selectedModel = null
-            clearedData.selectedModelId = null
         }
 
         setProductData(clearedData)
     }
 
     const getFlowSteps = () => {
-        // In edit mode, if we have initialData category, use that
         let categoryName = null
         if (editMode && initialData?.category) {
             categoryName = initialData.category
@@ -223,17 +192,34 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
             categoryName = categories[productData.selectedCategory]
         }
 
-        if (!categoryName) return ["Category"]
+        console.log('=== getFlowSteps Debug ===')
+        console.log('editMode:', editMode)
+        console.log('initialData?.category:', initialData?.category)
+        console.log('productData.selectedCategory:', productData.selectedCategory)
+        console.log('categories:', categories)
+        console.log('categoryName:', categoryName)
 
+        if (!categoryName) {
+            console.log('No categoryName, returning default ["Category"]')
+            return ["Category"]
+        }
+
+        console.log('Determining flow for category:', categoryName)
+
+        // New simplified flow - Cover goes: Category → Subcategory → Gender → Brand → Form
         switch (categoryName) {
             case "Cover":
-                return ["Category", "Subcategory", "Gender", "Brand", "Sub-brand", "Model", "Form"]
+                console.log('Cover flow: Category → Subcategory → Gender → Brand → Form')
+                return ["Category", "Subcategory", "Gender", "Brand", "Form"]
             case "Tuffun":
+                console.log('Tuffun flow: Category → Subcategory → Glass Type → Brand → Form')
                 return ["Category", "Subcategory", "Glass Type", "Brand", "Form"]
             case "Earphone":
             case "Headphone":
+                console.log('Earphone/Headphone flow: Category → Subcategory → Brand → Form')
                 return ["Category", "Subcategory", "Brand", "Form"]
             case "Buds":
+                console.log('Buds flow: Category → Brand → Form')
                 return ["Category", "Brand", "Form"]
             case "Charger":
             case "Power Bank":
@@ -241,31 +227,41 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
             case "Wireless Charger":
             case "Cable":
             case "Pencil":
+                console.log('Standard flow: Category → Subcategory → Brand → Form')
                 return ["Category", "Subcategory", "Brand", "Form"]
             case "Watch":
+                console.log('Watch flow: Category → Gender → Brand → Form')
                 return ["Category", "Gender", "Brand", "Form"]
             case "Keyboard":
+                console.log('Keyboard flow: Category → Subcategory → Brand → Form')
                 return ["Category", "Subcategory", "Brand", "Form"]
             case "Camera Ring":
-                return ["Category", "Subcategory", "Brand", "Model", "Sub-brand", "Form"]
+                console.log('Camera Ring flow: Category → Subcategory → Brand → Form')
+                return ["Category", "Subcategory", "Brand", "Form"]
             case "Watch Belt":
+                console.log('Watch Belt flow: Category → Subcategory → Gender → Type → Brand → Form')
                 return ["Category", "Subcategory", "Gender", "Type", "Brand", "Form"]
             case "Water Pouch":
+                console.log('Water Pouch flow: Category → Brand → Form')
                 return ["Category", "Brand", "Form"]
             case "Stand":
+                console.log('Stand flow: Category → Subcategory → Brand → Form')
                 return ["Category", "Subcategory", "Brand", "Form"]
             case "Lamination":
+                console.log('Lamination flow: Category → Subcategory → Form')
                 return ["Category", "Subcategory", "Form"]
             case "Magsafe Accesories":
+                console.log('Magsafe flow: Category → Subcategory → Brand → Form')
                 return ["Category", "Subcategory", "Brand", "Form"]
             default:
+                console.log('Default flow: Category → Form')
                 return ["Category", "Form"]
         }
     }
 
     const getStepCountForCategory = (categoryName) => {
         switch (categoryName) {
-            case "Cover": return 7
+            case "Cover": return 5
             case "Tuffun": return 5
             case "Earphone":
             case "Headphone": return 4
@@ -278,7 +274,7 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
             case "Pencil": return 4
             case "Watch": return 4
             case "Keyboard": return 4
-            case "Camera Ring": return 6
+            case "Camera Ring": return 4
             case "Watch Belt": return 6
             case "Water Pouch": return 3
             case "Stand": return 4
@@ -292,9 +288,17 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
     const currentStepName = flowSteps[currentStep - 1]
 
     const nextStep = () => {
+        console.log('=== ProductSteps nextStep ===')
+        console.log('Current step:', currentStep)
+        console.log('Total steps:', flowSteps.length)
+        console.log('Flow steps:', flowSteps)
+        
         if (currentStep < flowSteps.length) {
+            console.log('Moving to step:', currentStep + 1)
             setCurrentStep(currentStep + 1)
             setUnlockedStep(Math.max(unlockedStep, currentStep + 1))
+        } else {
+            console.log('Already at last step!')
         }
     }
 
@@ -305,12 +309,9 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
     }
 
     const goToStep = (stepNum) => {
-        // Only allow backward navigation (going to previous completed steps)
         if (stepNum < currentStep) {
-            // Clear subsequent step data when going back
             clearSubsequentData(stepNum)
             setCurrentStep(stepNum)
-            // Reset unlocked step to current step + 1 to force re-completion
             setUnlockedStep(stepNum + 1)
         }
     }
@@ -321,42 +322,34 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
             selectedSubcategory: null,
             selectedSubcategoryId: null,
             selectedGender: null,
-            selectedBrand: null,
-            selectedBrandId: null,
-            selectedSubBrand: null,
-            selectedSubBrandId: null,
-            selectedModel: null,
-            selectedModelId: null,
-            selectedGlassType: null,
-            selectedGlassTypeId: null,
             selectedType: null,
             selectedTypeId: null,
-            productForm: {
-                name: "",
+            selectedGlassType: null,
+            selectedGlassTypeId: null,
+            selectedBrand: null,
+            selectedBrandId: null,
+            productForm: { 
+                name: "", 
                 hsn: "",
-                vendor: "",
-                minSellingPrice: "",
-                purchasePrice: "",
                 sellingPrice: "",
+                minSellingPrice: "",
                 minQtyAlert: "",
-                commissionType: "fixed",
+                commissionType: "percent",
                 commissionValue: "",
-                selectedBranches: [],
-                branchQuantities: {},
-                chargerType: "",
-                cableType: "",
-                capacity: "",
-                selectedModels: [],
             },
-            serialNumbers: [],
             hasWarranty: false,
-            warrantyMonths: ""
+            warrantyMonths: "",
+            variants: []
         })
         setCurrentStep(1)
         setUnlockedStep(1)
     }
 
     const renderCurrentStep = () => {
+        const categoryName = productData.selectedCategory !== null && categories.length > 0 
+            ? categories[productData.selectedCategory] 
+            : null
+            
         const commonProps = {
             productData,
             updateProductData,
@@ -366,6 +359,7 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
             totalSteps: flowSteps.length,
             categories,
             categoriesData,
+            categoriesLoading,
             editMode
         }
 
@@ -378,10 +372,6 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
                 return <GenderSelection {...commonProps} />
             case "Brand":
                 return <BrandSelection {...commonProps} />
-            case "Sub-brand":
-                return <SubBrandSelection {...commonProps} />
-            case "Model":
-                return <ModelSelection {...commonProps} />
             case "Glass Type":
                 return <GlassTypeSelection {...commonProps} />
             case "Type":
@@ -402,7 +392,7 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
                 </h1>
             </div>
 
-            {/* Step Progress - Compact with Names */}
+            {/* Step Progress */}
             {!editMode && (
                 <div className="flex items-center justify-center gap-2 py-3 px-4 bg-muted/30 rounded-lg flex-wrap">
                     {flowSteps.map((step, index) => (
@@ -415,7 +405,6 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
                                         : 'bg-muted text-muted-foreground'
                                     }`}
                                 onClick={() => {
-                                    // Only allow backward navigation
                                     if (currentStep > index + 1) {
                                         goToStep(index + 1)
                                     }
@@ -432,12 +421,10 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
                                         : 'text-muted-foreground'
                                     }`}
                                 onClick={() => {
-                                    // Only allow backward navigation
                                     if (currentStep > index + 1) {
                                         goToStep(index + 1)
                                     }
                                 }}
-                                title={currentStep > index + 1 ? `Go back to ${step}` : step}
                             >
                                 {step}
                             </span>
@@ -451,7 +438,6 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
 
             {/* Current Step Component */}
             {editMode && initialData ? (
-                // In edit mode, show form directly
                 <ProductForm
                     productData={productData}
                     updateProductData={updateProductData}
@@ -460,6 +446,7 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
                     totalSteps={flowSteps.length}
                     categories={categories}
                     categoriesData={categoriesData}
+                    categoriesLoading={categoriesLoading}
                     editMode={editMode}
                     onClose={onClose}
                     onSaved={onSaved}
@@ -468,7 +455,6 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
             ) : (
                 renderCurrentStep()
             )}
-
-        </div >
+        </div>
     )
 }

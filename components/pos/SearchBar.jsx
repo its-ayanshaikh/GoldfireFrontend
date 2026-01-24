@@ -37,7 +37,7 @@ const SearchBar = ({ onProductSelect, selectedBranch, withBarcodeScanner }) => {
       .replace(/\u000A/g, '')      // Remove line feed unicode (global)
       .replace(/\u0013/g, '')      // Remove device control 3
       .replace(/\u0010/g, '')      // Remove device control 0
-      .trim()                      // Remove whitespace
+      // Don't trim - allow spaces in search
   }
 
   // API search function
@@ -70,23 +70,24 @@ const SearchBar = ({ onProductSelect, selectedBranch, withBarcodeScanner }) => {
         let transformedProducts = []
 
         if (data.success && data.products && Array.isArray(data.products)) {
-          // New API response format - all products have direct fields
+          // New API response format with variant support
           transformedProducts = data.products.map(product => ({
-            id: product.id || product.product_id,
-            name: product.name || product.product_name,
+            id: product.product_id,
+            variantId: product.variant_id || null,
+            name: product.name,
+            brand: product.brand || "",
+            subbrand: product.subbrand || "",
+            model: product.model || "",
             price: parseFloat(product.selling_price) || 0,
+            minPrice: parseFloat(product.minimum_selling_price) || 0, // MSP - for salesperson only
             barcode: product.barcode || "",
             qty: product.qty || 0,
-            gst: product.gst || product.hsn || { cgst: 9, sgst: 9, igst: 18 },
+            gst: product.gst || { cgst: 9, sgst: 9, igst: 0 },
             isWarrantyItem: product.is_warranty_item || false,
             warrantyPeriod: product.warranty_period,
-            hsnCode: product.hsn_code || product.hsn?.hsn_code,
-            serialNumber: product.serial_number,
+            hsnCode: product.hsn_code,
             serialNumbers: product.serial_numbers || [],
-            searchType: product.search_type || "regular",
-            brand: product.brand || "",
-            model: product.model || "",
-            rack: product.rack || ""
+            searchType: product.search_type || "regular"
           }))
 
           console.log('SearchBar - Transformed products:', transformedProducts)
@@ -233,21 +234,22 @@ const SearchBar = ({ onProductSelect, selectedBranch, withBarcodeScanner }) => {
               if (product) {
                 // Use the new API response format
                 const transformedProduct = {
-                  id: product.id || product.product_id,
-                  name: product.name || product.product_name,
+                  id: product.product_id,
+                  variantId: product.variant_id || null,
+                  name: product.name,
+                  brand: product.brand || "",
+                  subbrand: product.subbrand || "",
+                  model: product.model || "",
                   price: parseFloat(product.selling_price) || 0,
+                  minPrice: parseFloat(product.minimum_selling_price) || 0,
                   barcode: product.barcode,
                   qty: product.qty || 0,
-                  gst: product.gst || { cgst: 9, sgst: 9, igst: 18 },
+                  gst: product.gst || { cgst: 9, sgst: 9, igst: 0 },
                   isWarrantyItem: product.is_warranty_item || false,
                   warrantyPeriod: product.warranty_period,
                   hsnCode: product.hsn_code,
-                  serialNumber: product.serial_number,
                   serialNumbers: product.serial_numbers || [],
-                  searchType: product.search_type || "barcode",
-                  brand: product.brand || "",
-                  model: product.model || "",
-                  rack: product.rack || ""
+                  searchType: product.search_type || "barcode"
                 }
 
                 console.log('SearchBar - Transformed barcode product:', transformedProduct)
@@ -530,6 +532,13 @@ const SearchBar = ({ onProductSelect, selectedBranch, withBarcodeScanner }) => {
                 key={product.id}
                 onClick={() => handleProductSelect(product)}
                 onMouseEnter={() => setSelectedIndex(index)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  // Show MSP on double click (for salesperson)
+                  if (product.minPrice && product.minPrice > 0) {
+                    alert(`Minimum Selling Price: ₹${product.minPrice.toLocaleString()}`)
+                  }
+                }}
                 className={`w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 border-b border-gray-100 last:border-b-0 transition-colors ${index === selectedIndex
                   ? "bg-blue-50 border-blue-200"
                   : "hover:bg-gray-50"
@@ -541,28 +550,28 @@ const SearchBar = ({ onProductSelect, selectedBranch, withBarcodeScanner }) => {
                     {product.brand && (
                       <span className="text-gray-600">{product.brand}</span>
                     )}
-                    {product.brand && product.model && <span>•</span>}
-                    {product.model && (
-                      <span className="text-gray-600">{product.model}</span>
+                    {product.subbrand && (
+                      <>
+                        <span>•</span>
+                        <span className="text-gray-600">{product.subbrand}</span>
+                      </>
                     )}
-                    {(product.brand || product.model) && product.barcode && <span>•</span>}
+                    {product.model && (
+                      <>
+                        <span>•</span>
+                        <span className="text-gray-600">{product.model}</span>
+                      </>
+                    )}
                     {product.barcode && (
-                      <span className="text-gray-600 font-mono text-xs">{product.barcode}</span>
+                      <>
+                        <span>•</span>
+                        <span className="text-gray-600 font-mono text-xs">{product.barcode}</span>
+                      </>
                     )}
                     <span className="font-semibold text-gray-800">₹{product.price.toLocaleString()}</span>
-                    {product.rack && (
-                      <span className="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs font-medium">
-                        📍 {product.rack}
-                      </span>
-                    )}
                     {product.isWarrantyItem && (
                       <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
                         Warranty: {product.warrantyPeriod || 'N/A'}
-                      </span>
-                    )}
-                    {product.searchType === "serial_number" && (
-                      <span className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-xs">
-                        SN: {product.serialNumber}
                       </span>
                     )}
                   </div>
@@ -573,7 +582,7 @@ const SearchBar = ({ onProductSelect, selectedBranch, withBarcodeScanner }) => {
                 </div>
                 {index === selectedIndex && (
                   <div className="text-xs text-blue-600 mt-1">
-                    Press Enter to add to cart
+                    Press Enter to add • Double-click for MSP
                   </div>
                 )}
               </button>

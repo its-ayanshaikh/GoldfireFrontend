@@ -21,9 +21,12 @@ const LegacyRedirectHandler = () => {
         'dashboard': '/admin/dashboard',
         'product-list': '/admin/product',
         'product-add': '/admin/product/add',
+        'product-edit': id ? `/admin/product/edit/${id}` : '/admin/product',
         'product-view': id ? `/admin/product/${id}` : '/admin/product',
         'purchase-list': '/admin/purchase',
+        'purchase': '/admin/purchase',
         'purchase-add': '/admin/purchase/add',
+        'purchase-edit': id ? `/admin/purchase/edit/${id}` : '/admin/purchase',
         'purchase-return': '/admin/purchase/return',
         'employee-list': '/admin/employee',
         'attendance-system': '/admin/attendance',
@@ -56,7 +59,7 @@ const LegacyRedirectHandler = () => {
 
 // Wrapper component that passes user and onLogout to AdminDashboard
 const AdminDashboardWrapper = ({ view, id, user, onLogout }) => {
-  return <AdminDashboard view={view} user={user} onLogout={onLogout} />
+  return <AdminDashboard view={view} id={id} user={user} onLogout={onLogout} />
 }
 
 const AdminRouter = ({ user, onLogout }) => {
@@ -75,11 +78,13 @@ const AdminRouter = ({ user, onLogout }) => {
             {/* Product routes */}
             <Route path="/admin/product" element={<AdminDashboardWrapper view="product" user={user} onLogout={onLogout} />} />
             <Route path="/admin/product/add" element={<AdminDashboardWrapper view="product-add" user={user} onLogout={onLogout} />} />
+            <Route path="/admin/product/edit/:id" element={<AdminDashboardWrapper view="product-edit" user={user} onLogout={onLogout} />} />
             <Route path="/admin/product/:id" element={<AdminDashboardWrapper view="product-view" user={user} onLogout={onLogout} />} />
 
             {/* Purchase routes */}
             <Route path="/admin/purchase" element={<AdminDashboardWrapper view="purchase" user={user} onLogout={onLogout} />} />
             <Route path="/admin/purchase/add" element={<AdminDashboardWrapper view="purchase-add" user={user} onLogout={onLogout} />} />
+            <Route path="/admin/purchase/edit/:id" element={<AdminDashboardWrapper view="purchase-add" user={user} onLogout={onLogout} />} />
             <Route path="/admin/purchase/return" element={<AdminDashboardWrapper view="purchase-return" user={user} onLogout={onLogout} />} />
 
             {/* Employee routes */}

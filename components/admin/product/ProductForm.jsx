@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "../../ui/button"
-import { ChevronLeft, Plus, X, Check } from "lucide-react"
+import { ChevronLeft, Plus, X, Check, Trash2, Search } from "lucide-react"
 import { useToast } from "../../../hooks/use-toast"
-import JsBarcode from "jsbarcode"
+
+// Categories that have variants (Sub Brand + Model)
+const VARIANT_CATEGORIES = ["Cover", "Tuffun", "Camera Ring"]
 
 export default function ProductForm({
     productData,
@@ -17,857 +19,642 @@ export default function ProductForm({
     onSaved,
     resetForm
 }) {
+    
     const { toast } = useToast()
     const [isSaving, setIsSaving] = useState(false)
     const [saveSuccess, setSaveSuccess] = useState(false)
 
+    // Modal states for adding new model/subbrand
+    const [showModelModal, setShowModelModal] = useState(false)
+    const [showSubBrandModal, setShowSubBrandModal] = useState(false)
+    const [newModelName, setNewModelName] = useState("")
+    const [newSubBrandName, setNewSubBrandName] = useState("")
+    const [isAddingSubBrand, setIsAddingSubBrand] = useState(false)
+    const [isAddingModel, setIsAddingModel] = useState(false)
+
+    // Model dropdown state
+    const [activeModelDropdown, setActiveModelDropdown] = useState(null)
+    const [selectedSubBrandForModel, setSelectedSubBrandForModel] = useState(null)
+    const [modelSearchTerm, setModelSearchTerm] = useState("")
+
+    // HSN & Commission data
+    const [hsnCommissionData, setHsnCommissionData] = useState(null)
+
     // API data states
-    const [vendors, setVendors] = useState([])
-    const [vendorsData, setVendorsData] = useState([])
-    const [branches, setBranches] = useState([])
-    const [branchesData, setBranchesData] = useState([])
-    const [hsnCodes, setHsnCodes] = useState([])
-    const [hsnData, setHsnData] = useState([])
-    const [, setModels] = useState([])
+    const [models, setModels] = useState([])
+    const [modelsLoading, setModelsLoading] = useState(false)
+    const [subBrands, setSubBrands] = useState([])
+    const [subBrandsLoading, setSubBrandsLoading] = useState(false)
 
-    // Loading states
-    const [vendorsLoading, setVendorsLoading] = useState(true)
-    const [branchesLoading, setBranchesLoading] = useState(true)
-    const [hsnLoading, setHsnLoading] = useState(true)
+    const categoryName = productData.selectedCategory !== null && categories && categories.length > 0 
+        ? categories[productData.selectedCategory] 
+        : null
+    const hasVariants = categoryName ? VARIANT_CATEGORIES.includes(categoryName) : false
 
-    // Serial number handling
-    const [serialInput, setSerialInput] = useState("")
-    const serialInputRef = useRef(null)
-    const [barcodeBuffer, setBarcodeBuffer] = useState("")
-    const [lastKeyTime, setLastKeyTime] = useState(0)
+    // Fetch HSN & Commission data when category changes (only in create mode)
+    useEffect(() => {
+        if (!editMode && productData.selectedCategory !== null && categoriesData && categoriesData.length > 0) {
+            // Get actual category ID from categoriesData using selectedCategory as index
+            const categoryData = categoriesData[productData.selectedCategory]
+            if (categoryData?.id) {
+                fetchHsnCommissionData(categoryData.id)
+            }
+        }
+    }, [productData.selectedCategory, categoriesData, editMode])
 
-    // Model selection for Tuffun
-    const [selectedModelToAdd, setSelectedModelToAdd] = useState("")
-    const [modelSuggestionIndex, setModelSuggestionIndex] = useState(-1)
+    // Fetch SubBrands from API when subcategory is selected
+    useEffect(() => {
+        console.log('🔍 SubBrands useEffect check:', {
+            selectedSubcategoryId: productData.selectedSubcategoryId,
+            hasVariants,
+            editMode,
+            variantsLength: productData.variants?.length
+        })
+        
+        // In edit mode with variants
+        if (editMode && productData.variants && productData.variants.length > 0) {
+            if (productData.selectedSubcategoryId) {
+                console.log('🔥 Edit mode - Fetching SubBrands for subcategoryId:', productData.selectedSubcategoryId)
+                fetchSubBrands(productData.selectedSubcategoryId)
+            }
+            return
+        }
+        
+        // Normal flow - fetch when hasVariants and subcategoryId available
+        if (hasVariants && productData.selectedSubcategoryId) {
+            console.log('🔥 Normal mode - Fetching SubBrands for subcategoryId:', productData.selectedSubcategoryId)
+            fetchSubBrands(productData.selectedSubcategoryId)
+        }
+    }, [hasVariants, productData.selectedSubcategoryId, editMode, productData.variants?.length])
 
-    const categoryName = productData.selectedCategory !== null ? categories[productData.selectedCategory] : null
-
-    // Barcode printing function - SAME LAYOUT AS BarcodePrinting.jsx
-    // Optimized for 38mm x 38mm 2-ups thermal printer
-    const printBarcodes = (barcodeData) => {
-        console.log('Printing scannable barcodes:', barcodeData)
-
+    const fetchHsnCommissionData = async (categoryIndex) => {
         try {
-            // Validate barcode data
-            if (!barcodeData || !Array.isArray(barcodeData) || barcodeData.length === 0) {
-                throw new Error('No barcode data provided')
-            }
-
-            // Generate barcode images first
-            const barcodeImages = []
-            let totalBarcodes = 0
-            let failedBarcodes = 0
-
-            barcodeData.forEach(item => {
-                const { branch, qty, barcode, price } = item
-
-                // Validate item data
-                if (!barcode || !qty || qty <= 0) {
-                    console.warn('Invalid barcode item:', item)
-                    return
-                }
-
-                for (let i = 0; i < qty; i++) {
-                    totalBarcodes++
-
-                    try {
-                        // Create canvas for barcode generation - SAME AS BarcodePrinting.jsx
-                        const canvas = document.createElement('canvas')
-
-                        // Generate scannable barcode using JsBarcode - SAME SETTINGS AS BarcodePrinting.jsx
-                        JsBarcode(canvas, barcode, {
-                            format: "CODE128",
-                            width: 3,               // Wider bars = easier to scan
-                            height: 80,             // Taller = better scan angle tolerance
-                            displayValue: false,
-                            margin: 15,             // Large quiet zone = CRITICAL for scanning
-                            lineColor: "#000000",
-                            background: "#ffffff"
-                        })
-
-                        barcodeImages.push({
-                            dataUrl: canvas.toDataURL('image/png', 1.0),
-                            barcode,
-                            price: price || 0,
-                            branch: branch || 'GOLDFIRE'
-                        })
-
-                    } catch (error) {
-                        console.error('Error generating barcode for:', barcode, error)
-                        // Fallback: Try CODE39 if CODE128 fails
-                        try {
-                            const canvas = document.createElement('canvas')
-                            JsBarcode(canvas, barcode, {
-                                format: "CODE39",
-                                width: 3,
-                                height: 80,
-                                displayValue: false,
-                                margin: 15,
-                                lineColor: "#000000",
-                                background: "#ffffff"
-                            })
-                            barcodeImages.push({
-                                dataUrl: canvas.toDataURL('image/png', 1.0),
-                                barcode,
-                                price: price || 0,
-                                branch: branch || 'GOLDFIRE'
-                            })
-                        } catch (fallbackError) {
-                            console.error('Fallback barcode generation error:', fallbackError)
-                            failedBarcodes++
-                        }
-                    }
-                }
-            })
-
-            // Check if any barcodes were generated successfully
-            if (barcodeImages.length === 0) {
-                throw new Error('Failed to generate any barcodes')
-            }
-
-            // Show warning if some barcodes failed
-            if (failedBarcodes > 0) {
-                toast({
-                    title: "Partial Barcode Generation",
-                    description: `${failedBarcodes} out of ${totalBarcodes} barcodes failed to generate.`,
-                    className: "bg-yellow-50 border-yellow-200 text-yellow-800",
-                })
-            }
-
-            // Get logo path - SAME AS BarcodePrinting.jsx
-            const logoPath = window.location.origin + '/barcode_logo.jpg'
-
-            // Create print content - SAME LAYOUT AS BarcodePrinting.jsx
-            let printContent = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Print Barcodes</title>
-                    <style>
-                        @page {
-                            margin: 0;
-                        }
-                        * {
-                            margin: 0;
-                            padding: 0;
-                            box-sizing: border-box;
-                        }
-                        html, body {
-                            font-family: Arial, sans-serif;
-                            margin: 0;
-                            padding: 0;
-                            -webkit-print-color-adjust: exact;
-                            print-color-adjust: exact;
-                        }
-                        .barcode-row {
-                            display: flex;
-                            page-break-after: always;
-                        }
-                        .barcode-row:last-child {
-                            page-break-after: avoid;
-                        }
-                        .barcode-label {
-                            display: flex;
-                            flex-direction: column;
-                            align-items: center;
-                            justify-content: space-between;
-                            text-align: center;
-                            margin-right: 2mm;
-                        }
-                        .barcode-label:last-child {
-                            margin-right: 0;
-                        }
-                        .logo {
-                            width: 22mm;
-                            height: 6mm;
-                            object-fit: contain;
-                        }
-                        .branch-name {
-                            font-size: 8pt;
-                            font-weight: bold;
-                            text-transform: uppercase;
-                            color: #000;
-                        }
-                        .barcode-img {
-                            width: 34mm;
-                            height: 14mm;
-                            object-fit: fill;
-                            image-rendering: -webkit-optimize-contrast;
-                            image-rendering: crisp-edges;
-                            -ms-interpolation-mode: nearest-neighbor;
-                            margin: 0.5mm 1mm;
-                        }
-                        .barcode-number {
-                            font-size: 9pt;
-                            font-family: 'Courier New', monospace;
-                            font-weight: bold;
-                            letter-spacing: 0.5px;
-                            color: #000;
-                        }
-                        .price {
-                            font-size: 14pt;
-                            font-weight: bold;
-                            color: #000;
-                        }
-                    </style>
-                </head>
-                <body>
-            `
-
-            // Generate barcodes in rows of 2 (for 2-ups paper) - SAME AS BarcodePrinting.jsx
-            for (let i = 0; i < barcodeImages.length; i += 2) {
-                printContent += '<div class="barcode-row">'
-
-                // First label
-                const barcode1 = barcodeImages[i]
-                printContent += `
-                    <div class="barcode-label">
-                        <img class="logo" src="${logoPath}" alt="GoldFire" onerror="this.style.display='none'" />
-                        <div class="branch-name">${barcode1.branch}</div>
-                        <img class="barcode-img" src="${barcode1.dataUrl}" alt="barcode" />
-                        <div class="barcode-number">${barcode1.barcode}</div>
-                        <div class="price">₹${Number(barcode1.price || 0).toLocaleString()}</div>
-                    </div>
-                `
-
-                // Second label (if exists)
-                if (i + 1 < barcodeImages.length) {
-                    const barcode2 = barcodeImages[i + 1]
-                    printContent += `
-                        <div class="barcode-label">
-                            <img class="logo" src="${logoPath}" alt="GoldFire" onerror="this.style.display='none'" />
-                            <div class="branch-name">${barcode2.branch}</div>
-                            <img class="barcode-img" src="${barcode2.dataUrl}" alt="barcode" />
-                            <div class="barcode-number">${barcode2.barcode}</div>
-                            <div class="price">₹${Number(barcode2.price || 0).toLocaleString()}</div>
-                        </div>
-                    `
-                } else {
-                    // Empty placeholder for odd count
-                    printContent += '<div class="barcode-label"></div>'
-                }
-
-                printContent += '</div>'
-            }
-
-            printContent += `
-                </body>
-                </html>
-            `
-
-            // Safari-compatible print using iframe - SAME AS BarcodePrinting.jsx
-            // Remove existing print frame if any
-            const existingFrame = document.getElementById('barcode-print-frame')
-            if (existingFrame) {
-                existingFrame.remove()
-            }
-
-            // Create hidden iframe for printing
-            const printFrame = document.createElement('iframe')
-            printFrame.id = 'barcode-print-frame'
-            printFrame.style.position = 'fixed'
-            printFrame.style.top = '-10000px'
-            printFrame.style.left = '-10000px'
-            printFrame.style.width = '1px'
-            printFrame.style.height = '1px'
-            printFrame.style.border = 'none'
-            document.body.appendChild(printFrame)
-
-            // Write content to iframe
-            const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document
-            frameDoc.open()
-            frameDoc.write(printContent)
-            frameDoc.close()
-
-            // Wait for images to load then print (Safari needs more time)
-            const images = frameDoc.getElementsByTagName('img')
-            let loadedImages = 0
-            const totalImagesCount = images.length
-
-            const triggerPrint = () => {
-                setTimeout(() => {
-                    try {
-                        printFrame.contentWindow.focus()
-                        printFrame.contentWindow.print()
-                    } catch (e) {
-                        // Fallback for Safari - open in new window
-                        const printWindow = window.open('', '_blank')
-                        if (printWindow) {
-                            printWindow.document.write(printContent)
-                            printWindow.document.close()
-                            printWindow.focus()
-                            setTimeout(() => printWindow.print(), 500)
-                        }
-                    }
-                }, 300)
-            }
-
-            if (totalImagesCount === 0) {
-                triggerPrint()
-            } else {
-                for (let img of images) {
-                    if (img.complete) {
-                        loadedImages++
-                        if (loadedImages === totalImagesCount) triggerPrint()
-                    } else {
-                        img.onload = img.onerror = () => {
-                            loadedImages++
-                            if (loadedImages === totalImagesCount) triggerPrint()
-                        }
-                    }
-                }
-                // Fallback timeout in case images don't trigger events
-                setTimeout(triggerPrint, 1500)
-            }
-
-            // Show success message
-            toast({
-                title: "Scannable Barcodes Ready",
-                description: `${barcodeImages.length} scannable barcodes generated and ready to print!`,
-                className: "bg-green-50 border-green-200 text-green-800",
-            })
-
-        } catch (error) {
-            console.error('Barcode printing error:', error)
-            toast({
-                title: "Barcode Print Failed",
-                description: error.message || "An error occurred while printing barcodes.",
-                variant: "destructive",
-            })
-            throw error
-        }
-    }
-
-    // Fetch vendors from API
-    useEffect(() => {
-        const fetchVendors = async () => {
-            try {
-                const token = localStorage.getItem('access_token')
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/vendor/`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'omit',
-                })
-
-                if (response.ok) {
-                    const data = await response.json()
-                    setVendorsData(data)
-                    setVendors(data.map(vendor => vendor.name))
-                }
-            } catch (error) {
-                console.error('Error fetching vendors:', error)
-            } finally {
-                setVendorsLoading(false)
-            }
-        }
-
-        fetchVendors()
-    }, [])
-
-    // Fetch branches from API
-    useEffect(() => {
-        const fetchBranches = async () => {
-            try {
-                const token = localStorage.getItem('access_token')
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/branch/`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'omit',
-                })
-
-                if (response.ok) {
-                    const data = await response.json()
-                    setBranchesData(data)
-                    setBranches(data.map(branch => branch.name))
-                }
-            } catch (error) {
-                console.error('Error fetching branches:', error)
-            } finally {
-                setBranchesLoading(false)
-            }
-        }
-
-        fetchBranches()
-    }, [])
-
-    // Fetch HSN codes from API
-    useEffect(() => {
-        const fetchHSNCodes = async () => {
-            try {
-                const token = localStorage.getItem('access_token')
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/hsn/list/`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'omit',
-                })
-
-                if (response.ok) {
-                    const data = await response.json()
-                    setHsnData(data)
-                    setHsnCodes(data.map(hsn => hsn.code))
-
-                    // Auto-select HSN for category
-                    if (productData.selectedCategory !== null && categoriesData.length > 0) {
-                        const categoryObj = categoriesData.find(cat => cat.name === categoryName)
-                        if (categoryObj) {
-                            const categoryHsn = data.find(hsn => hsn.category === categoryObj.id)
-                            if (categoryHsn && !productData.productForm.hsn) {
-                                updateProductData({
-                                    productForm: { ...productData.productForm, hsn: categoryHsn.code }
-                                })
-                            }
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Error fetching HSN codes:', error)
-            } finally {
-                setHsnLoading(false)
-            }
-        }
-
-        fetchHSNCodes()
-    }, [productData.selectedCategory, categoriesData])
-
-    // Fetch commission for category
-    useEffect(() => {
-        const fetchCommissionForCategory = async () => {
-            try {
-                if (productData.selectedCategory === null || categoriesData.length === 0) {
-                    return
-                }
-
-                const categoryObj = categoriesData.find(cat => cat.name === categoryName)
-                if (!categoryObj) {
-                    return
-                }
-
-                const token = localStorage.getItem('access_token')
-                const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/commission/${categoryObj.id}/`,
-                    {
-                        method: 'GET',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json',
-                        },
-                        credentials: 'omit',
-                    }
-                )
-
-                if (response.ok) {
-                    const data = await response.json()
-                    if (data && data.commission_type && data.commission_value) {
-                        // Prefill commission type and value
-                        const commissionType = data.commission_type === "percentage" ? "percent" : "fixed"
-                        updateProductData({
-                            productForm: {
-                                ...productData.productForm,
-                                commissionType: commissionType,
-                                commissionValue: data.commission_value.toString()
-                            }
-                        })
-                    }
-                }
-            } catch (error) {
-                console.error('Error fetching commission:', error)
-            }
-        }
-
-        fetchCommissionForCategory()
-    }, [productData.selectedCategory, categoriesData])
-
-    // Fetch models for Tuffun category
-    useEffect(() => {
-        if (categoryName === "Tuffun" && productData.selectedBrand) {
-            fetchModelsForBrand()
-        }
-    }, [categoryName, productData.selectedBrand])
-
-    const fetchModelsForBrand = async () => {
-        try {
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
             const token = localStorage.getItem('access_token')
-            // This would need to be implemented based on your API structure
-            // For now, using a placeholder
-            setModels([])
-        } catch (error) {
-            console.error('Error fetching models:', error)
-        }
-    }
-
-    const addSerialNumber = useCallback(() => {
-        const trimmed = serialInput.trim()
-        if (trimmed) {
-            updateProductData({
-                serialNumbers: [...productData.serialNumbers, trimmed]
-            })
-            setSerialInput("")
-        }
-    }, [serialInput, productData.serialNumbers, updateProductData])
-
-    const removeSerialNumber = useCallback((index) => {
-        updateProductData({
-            serialNumbers: productData.serialNumbers.filter((_, i) => i !== index)
-        })
-    }, [productData.serialNumbers, updateProductData])
-
-    const handleSerialKeyDown = useCallback((e) => {
-        if (e.key === "Enter") {
-            e.preventDefault()
-            addSerialNumber()
-        }
-    }, [addSerialNumber])
-
-    // Barcode scanner detection
-    const handleSerialInput = useCallback((e) => {
-        const currentTime = Date.now()
-        const timeDiff = currentTime - lastKeyTime
-
-        // If time between keystrokes is very small (< 50ms), it's likely a barcode scanner
-        if (timeDiff < 50 && barcodeBuffer.length > 0) {
-            setBarcodeBuffer(prev => prev + e.target.value.slice(-1))
-        } else {
-            setBarcodeBuffer(e.target.value.slice(-1))
-        }
-
-        setLastKeyTime(currentTime)
-        setSerialInput(e.target.value)
-
-        // Auto-add if it looks like a complete barcode scan (typically ends with Enter or has specific length)
-        if (e.target.value.length >= 8 && timeDiff < 50) {
-            setTimeout(() => {
-                if (e.target.value.trim()) {
-                    addSerialNumber()
+            
+            console.log('🔥 Fetching HSN & Commission data for category:', categoryIndex)
+            
+            const response = await fetch(`${baseUrl}/api/product/${categoryIndex}/hsn&comission/`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token && { 'Authorization': `Bearer ${token}` })
                 }
-            }, 100)
-        }
-    }, [lastKeyTime, barcodeBuffer, addSerialNumber, productData.serialNumbers])
-
-    const addModelToSelected = (model) => {
-        if (!model) return
-        if (productData.productForm.selectedModels.includes(model)) return
-        updateProductData({
-            productForm: {
-                ...productData.productForm,
-                selectedModels: [...productData.productForm.selectedModels, model]
+            })
+            
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+            
+            const data = await response.json()
+            console.log('✅ HSN & Commission API Response:', data)
+            setHsnCommissionData(data)
+            
+            // Prefill HSN only (in edit mode, commission comes from product details)
+            const updateData = {
+                productForm: {
+                    ...productData.productForm,
+                    hsn: data.hsn?.hsn_code || ""
+                }
             }
-        })
-        setSelectedModelToAdd("")
-        setModelSuggestionIndex(-1)
+            
+            // In create mode, also prefill commission
+            if (!editMode) {
+                updateData.productForm.commissionType = data.commission?.type === "percentage" ? "percent" : "fixed"
+                updateData.productForm.commissionValue = data.commission?.value || ""
+            }
+            
+            updateProductData(updateData)
+            
+        } catch (error) {
+            console.error('❌ Error fetching HSN & Commission:', error)
+            setHsnCommissionData(null)
+        }
     }
 
-    const commissionPreview = useMemo(() => {
-        const sellingPrice = Number.parseFloat(productData.productForm.sellingPrice) || 0
-        const commissionValue = Number.parseFloat(productData.productForm.commissionValue) || 0
-
-        if (sellingPrice === 0 || commissionValue === 0) return null
-
-        if (productData.productForm.commissionType === "percent") {
-            const amount = (sellingPrice * commissionValue) / 100
-            return `₹${amount.toFixed(2)} (${commissionValue}%)`
-        } else {
-            const percent = (commissionValue / sellingPrice) * 100
-            return `${percent.toFixed(2)}% (₹${commissionValue})`
+    const fetchSubBrands = async (subcategoryId) => {
+        if (!subcategoryId) {
+            setSubBrands([])
+            return
         }
-    }, [productData.productForm.sellingPrice, productData.productForm.commissionValue, productData.productForm.commissionType])
+        
+        try {
+            setSubBrandsLoading(true)
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
+            const token = localStorage.getItem('access_token')
+            
+            console.log('🔥 Fetching sub-brands for subcategory:', subcategoryId)
+            
+            const response = await fetch(`${baseUrl}/api/product/subbrands/${subcategoryId}/`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token && { 'Authorization': `Bearer ${token}` })
+                }
+            })
+            
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+            
+            const data = await response.json()
+            console.log('✅ SubBrands API Response:', data)
+            setSubBrands(data)
+            
+        } catch (error) {
+            console.error('❌ Error fetching sub-brands:', error)
+            setSubBrands([])
+        } finally {
+            setSubBrandsLoading(false)
+        }
+    }
+
+    // Fetch Models by SubBrand ID
+    const fetchModels = async (subBrandId) => {
+        if (!subBrandId) {
+            setModels([])
+            return
+        }
+        
+        try {
+            setModelsLoading(true)
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
+            const token = localStorage.getItem('access_token')
+            
+            console.log('🔥 Fetching models for sub-brand:', subBrandId)
+            
+            const response = await fetch(`${baseUrl}/api/product/models/${subBrandId}/`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token && { 'Authorization': `Bearer ${token}` })
+                }
+            })
+            
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+            
+            const data = await response.json()
+            console.log('✅ Models API Response:', data)
+            setModels(data)
+            
+        } catch (error) {
+            console.error('❌ Error fetching models:', error)
+            setModels([])
+        } finally {
+            setModelsLoading(false)
+        }
+    }
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (!hasVariants) return
+            if (e.ctrlKey && e.key === 'm') {
+                e.preventDefault()
+                // Only open model modal if a sub-brand is selected
+                if (selectedSubBrandForModel) {
+                    setShowModelModal(true)
+                } else {
+                    toast({ title: "Select Sub Brand", description: "Please select a sub-brand first", variant: "destructive" })
+                }
+            }
+            if (e.ctrlKey && e.key === 'b') {
+                e.preventDefault()
+                setShowSubBrandModal(true)
+            }
+            if (e.key === 'Escape') {
+                setShowModelModal(false)
+                setShowSubBrandModal(false)
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [hasVariants, selectedSubBrandForModel, toast])
+
+    // Get available sub-brands - SubBrand available until ALL its models are selected across variants
+    const getAvailableSubBrands = useCallback((currentVariantId) => {
+        return subBrands.filter(sb => {
+            // Get all variants that have this sub-brand selected (except current one)
+            const variantsWithThisSubBrand = (productData.variants || [])
+                .filter(v => v.id !== currentVariantId && parseInt(v.subBrandId) === sb.id)
+            
+            // If no other variant has this sub-brand, it's available
+            if (variantsWithThisSubBrand.length === 0) return true
+            
+            // Get all selected model IDs for this sub-brand across all variants
+            const allSelectedModelIds = variantsWithThisSubBrand
+                .flatMap(v => v.selectedModels || [])
+            
+            // Get total models for this sub-brand from API (we need to check if all are selected)
+            // SubBrand is available if not all models are selected yet
+            const subBrandModels = models.filter(m => m.subbrand === sb.id)
+            
+            // If we don't have models loaded for this subbrand, keep it available
+            if (subBrandModels.length === 0) return true
+            
+            // Check if all models are selected
+            const allModelsSelected = subBrandModels.every(m => allSelectedModelIds.includes(m.id))
+            
+            return !allModelsSelected
+        })
+    }, [productData.variants, subBrands, models])
+
+    // Get remaining models for a sub-brand (exclude models already selected in other variants with same sub-brand)
+    const getRemainingModelsForSubBrand = useCallback((subBrandId, currentVariantId) => {
+        // Get all selected model IDs for this sub-brand in OTHER variants
+        const selectedModelIdsInOtherVariants = (productData.variants || [])
+            .filter(v => v.id !== currentVariantId && parseInt(v.subBrandId) === parseInt(subBrandId))
+            .flatMap(v => v.selectedModels || [])
+        
+        // Return models that are NOT selected in other variants
+        return models.filter(m => !selectedModelIdsInOtherVariants.includes(m.id))
+    }, [productData.variants, models])
+
+    // Add new variant row
+    const addVariant = useCallback(() => {
+        const newVariant = {
+            id: `variant_${(productData.variants || []).length}_${Math.random().toString(36).substring(2, 9)}`,
+            subBrandId: "",
+            subBrandName: "",
+            selectedModels: [],
+            selectedModelNames: [],
+            sellingPrice: "",
+            minSellingPrice: "",
+            minQtyAlert: "5"
+        }
+        updateProductData({
+            variants: [...(productData.variants || []), newVariant]
+        })
+    }, [productData.variants, updateProductData])
+
+    // Update variant
+    const updateVariant = useCallback((variantId, field, value) => {
+        const updatedVariants = (productData.variants || []).map(v => {
+            if (v.id === variantId) {
+                const updated = { ...v, [field]: value }
+                
+                if (field === 'subBrandId') {
+                    const subBrand = subBrands.find(sb => sb.id === parseInt(value))
+                    updated.subBrandName = subBrand?.name || ""
+                    // Clear selected models when sub-brand changes
+                    updated.selectedModels = []
+                    updated.selectedModelNames = []
+                    // Fetch models for new sub-brand
+                    if (value) {
+                        fetchModels(value)
+                    }
+                }
+                
+                return updated
+            }
+            return v
+        })
+        updateProductData({ variants: updatedVariants })
+    }, [productData.variants, updateProductData, subBrands])
+
+    // Toggle model selection in variant
+    const toggleModelInVariant = useCallback((variantId, modelId) => {
+        const updatedVariants = (productData.variants || []).map(v => {
+            if (v.id === variantId) {
+                const selectedModels = v.selectedModels || []
+                const selectedModelNames = v.selectedModelNames || []
+                const model = models.find(m => m.id === modelId)
+                
+                if (selectedModels.includes(modelId)) {
+                    return {
+                        ...v,
+                        selectedModels: selectedModels.filter(id => id !== modelId),
+                        selectedModelNames: selectedModelNames.filter(name => name !== model?.name)
+                    }
+                } else {
+                    return {
+                        ...v,
+                        selectedModels: [...selectedModels, modelId],
+                        selectedModelNames: [...selectedModelNames, model?.name || ""]
+                    }
+                }
+            }
+            return v
+        })
+        updateProductData({ variants: updatedVariants })
+    }, [productData.variants, updateProductData, models])
+
+    // Remove variant
+    const removeVariant = useCallback((variantId) => {
+        updateProductData({
+            variants: (productData.variants || []).filter(v => v.id !== variantId)
+        })
+    }, [productData.variants, updateProductData])
+
+    // Add new model via API
+    const handleAddModel = async () => {
+        if (!newModelName.trim() || !selectedSubBrandForModel) return
+        
+        try {
+            setIsAddingModel(true)
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
+            const token = localStorage.getItem('access_token')
+            
+            console.log('🔥 Creating new model:', newModelName.trim())
+            
+            const response = await fetch(`${baseUrl}/api/product/models/create/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token && { 'Authorization': `Bearer ${token}` })
+                },
+                body: JSON.stringify({
+                    name: newModelName.trim(),
+                    subbrand: parseInt(selectedSubBrandForModel)
+                })
+            })
+            
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+            
+            const newModel = await response.json()
+            console.log('✅ Model created:', newModel)
+            
+            setModels(prev => [...prev, newModel])
+            setNewModelName("")
+            setShowModelModal(false)
+            toast({ title: "Model Added", description: `"${newModel.data.name}" added successfully` })
+            
+            // Refresh models list
+            fetchModels(selectedSubBrandForModel)
+            
+        } catch (error) {
+            console.error('❌ Error creating model:', error)
+            toast({ title: "Error", description: "Failed to add model", variant: "destructive" })
+        } finally {
+            setIsAddingModel(false)
+        }
+    }
+
+    // Add new sub-brand via API
+    const handleAddSubBrand = async () => {
+        if (!newSubBrandName.trim()) return
+        
+        // Check if subcategory is selected from steps
+        if (!productData.selectedSubcategoryId) {
+            toast({ title: "Error", description: "Please select a subcategory first in previous steps", variant: "destructive" })
+            return
+        }
+        
+        try {
+            setIsAddingSubBrand(true)
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
+            const token = localStorage.getItem('access_token')
+            
+            console.log('🔥 Creating new sub-brand:', newSubBrandName.trim())
+            console.log('📦 With subcategory ID:', productData.selectedSubcategoryId)
+            
+            const response = await fetch(`${baseUrl}/api/product/subbrands/create/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token && { 'Authorization': `Bearer ${token}` })
+                },
+                body: JSON.stringify({
+                    name: newSubBrandName.trim(),
+                    subcategory: productData.selectedSubcategoryId
+                })
+            })
+            
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+            
+            const newSubBrand = await response.json()
+            console.log('✅ SubBrand created:', newSubBrand)
+            
+            setSubBrands(prev => [...prev, newSubBrand])
+            setNewSubBrandName("")
+            setShowSubBrandModal(false)
+            toast({ title: "Sub Brand Added", description: `"${newSubBrand.name}" added successfully` })
+            
+        } catch (error) {
+            console.error('❌ Error creating sub-brand:', error)
+            toast({ title: "Error", description: "Failed to add sub-brand", variant: "destructive" })
+        } finally {
+            setIsAddingSubBrand(false)
+        }
+    }
+
+    // Open model dropdown and fetch models for that variant's sub-brand
+    const openModelDropdown = (variantId) => {
+        const variant = (productData.variants || []).find(v => v.id === variantId)
+        if (variant?.subBrandId) {
+            setSelectedSubBrandForModel(variant.subBrandId)
+            fetchModels(variant.subBrandId)
+            setActiveModelDropdown(variantId)
+            setModelSearchTerm("") // Reset search when opening
+        } else {
+            toast({ title: "Select Sub Brand", description: "Please select a sub-brand first", variant: "destructive" })
+        }
+    }
+
+    // Close model dropdown and reset search
+    const closeModelDropdown = () => {
+        setActiveModelDropdown(null)
+        setModelSearchTerm("")
+    }
+
+    // Filter models based on search term AND show only remaining models for the sub-brand
+    const filteredModels = (() => {
+        // Get remaining models for the active variant's sub-brand
+        const variant = (productData.variants || []).find(v => v.id === activeModelDropdown)
+        if (!variant?.subBrandId) return []
+        
+        const remainingModels = getRemainingModelsForSubBrand(variant.subBrandId, activeModelDropdown)
+        
+        // Also include models already selected in THIS variant (so user can deselect them)
+        const currentVariantSelectedModels = variant.selectedModels || []
+        const modelsToShow = models.filter(m => 
+            remainingModels.some(rm => rm.id === m.id) || currentVariantSelectedModels.includes(m.id)
+        )
+        
+        // Apply search filter
+        return modelsToShow.filter(model => 
+            model?.name?.toLowerCase().includes(modelSearchTerm.toLowerCase())
+        )
+    })()
 
     const handleFinalSave = async () => {
         setIsSaving(true)
         setSaveSuccess(false)
 
         try {
-            // Validation
             if (!productData.productForm.name.trim()) {
                 throw new Error('Product name is required')
             }
-            if (!productData.productForm.purchasePrice || parseFloat(productData.productForm.purchasePrice) <= 0) {
-                throw new Error('Valid purchase price is required')
-            }
-            if (!productData.productForm.sellingPrice || parseFloat(productData.productForm.sellingPrice) <= 0) {
-                throw new Error('Valid selling price is required')
-            }
-            if (productData.selectedCategory === null) {
-                throw new Error('Category selection is required')
-            }
 
-            const token = localStorage.getItem('access_token')
-
-            // Helper functions to get IDs
-            const getCategoryId = () => {
-                if (productData.selectedCategory === null) return null
-                const categoryObj = categoriesData.find(cat => cat.name === categoryName)
-                return categoryObj?.id || null
-            }
-
-            const getVendorId = () => {
-                if (!productData.productForm.vendor) return null
-                const vendorObj = vendorsData.find(vendor => vendor.name === productData.productForm.vendor)
-                return vendorObj?.id || null
-            }
-
-            const getHsnId = () => {
-                if (!productData.productForm.hsn || !hsnData || hsnData.length === 0) return null
-                const hsnObj = hsnData.find(hsn => hsn.code === productData.productForm.hsn)
-                return hsnObj?.id || null
-            }
-
-            // Build quantities array for branches
-            const quantities = productData.productForm.selectedBranches.map(branchName => {
-                const branchObj = branchesData.find(branch => branch.name === branchName)
-                const qty = parseInt(productData.productForm.branchQuantities[branchName] || '0')
-                return {
-                    branch: branchObj?.id || null,
-                    qty: qty
+            if (hasVariants) {
+                if (!productData.variants || productData.variants.length === 0) {
+                    throw new Error('At least one variant is required')
                 }
-            }).filter(q => q.branch !== null)
-
-            // Helper functions to get all IDs
-            const getSubcategoryId = () => {
-                return productData.selectedSubcategoryId || null
-            }
-
-            const getBrandId = () => {
-                return productData.selectedBrandId || null
-            }
-
-            const getSubBrandId = () => {
-                return productData.selectedSubBrandId || null
-            }
-
-            const getModelId = () => {
-                return productData.selectedModelId || null
-            }
-
-            const getTypeId = () => {
-                return productData.selectedTypeId || productData.selectedGlassTypeId || null
-            }
-
-            // Determine if this is an update or create operation
-            const isUpdate = editMode && productData.productId
-
-            // Build API payload - for update, only send form values (not category/brand etc.)
-            let apiPayload = {}
-            
-            if (isUpdate) {
-                // For UPDATE: Only send editable form values, not category/brand/model etc.
-                apiPayload = {
-                    name: productData.productForm.name.trim(),
-                    vendor: getVendorId(),
-                    hsn: getHsnId(),
-                    purchase_price: parseFloat(productData.productForm.purchasePrice),
-                    selling_price: parseFloat(productData.productForm.sellingPrice),
-                    min_selling_price: parseFloat(productData.productForm.minSellingPrice) || parseFloat(productData.productForm.sellingPrice),
-                    min_qty_alert: parseInt(productData.productForm.minQtyAlert) || 5,
-                    commission_type: productData.productForm.commissionType === "percent" ? "percentage" : "fixed",
-                    commission_value: parseFloat(productData.productForm.commissionValue) || 0,
-                    is_warranty_item: productData.hasWarranty || false,
-                    quantities: quantities
+                for (const variant of productData.variants) {
+                    if (!variant.selectedModels || variant.selectedModels.length === 0) {
+                        throw new Error('At least one model is required for all variants')
+                    }
+                    if (!variant.sellingPrice || parseFloat(variant.sellingPrice) <= 0) {
+                        throw new Error('Valid selling price is required for all variants')
+                    }
                 }
             } else {
-                // For CREATE: Send all fields including category/brand etc.
-                apiPayload = {
-                    name: productData.productForm.name.trim(),
-                    category: getCategoryId(),
-                    subcategory: getSubcategoryId(),
-                    brand: getBrandId(),
-                    subbrand: getSubBrandId(),
-                    model: getModelId(),
-                    type: getTypeId(),
-                    vendor: getVendorId(),
-                    hsn: getHsnId(),
-                    purchase_price: parseFloat(productData.productForm.purchasePrice),
-                    selling_price: parseFloat(productData.productForm.sellingPrice),
-                    min_selling_price: parseFloat(productData.productForm.minSellingPrice) || parseFloat(productData.productForm.sellingPrice),
-                    min_qty_alert: parseInt(productData.productForm.minQtyAlert) || 5,
-                    commission_type: productData.productForm.commissionType === "percent" ? "percentage" : "fixed",
-                    commission_value: parseFloat(productData.productForm.commissionValue) || 0,
-                    status: "active",
-                    is_warranty_item: productData.hasWarranty || false,
-                    quantities: quantities
+                if (!productData.productForm.sellingPrice || parseFloat(productData.productForm.sellingPrice) <= 0) {
+                    throw new Error('Valid selling price is required')
                 }
             }
 
-            // Add warranty period if warranty is enabled
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
+            const token = localStorage.getItem('access_token')
+
+            // Get actual category ID from categoriesData
+            const categoryData = categoriesData[productData.selectedCategory]
+            const categoryId = categoryData?.id
+
+            if (!categoryId) {
+                throw new Error('Invalid category selected')
+            }
+
+            let payload = {
+                name: productData.productForm.name.trim(),
+                category: categoryId,
+                status: "active"
+            }
+
+            // Add subcategory if available
+            if (productData.selectedSubcategoryId) {
+                payload.subcategory = productData.selectedSubcategoryId
+            }
+
+            // Add type (Watch Belt type or Glass Type - both use same key)
+            const typeId = productData.selectedTypeId || productData.selectedGlassTypeId
+            if (typeId) {
+                payload.type = typeId
+            }
+
+            // Add brand if available
+            if (productData.selectedBrandId) {
+                payload.brand = productData.selectedBrandId
+            }
+
+            // Add warranty info
+            payload.is_warranty_item = productData.hasWarranty || false
             if (productData.hasWarranty && productData.warrantyMonths) {
-                apiPayload.warranty_period = productData.warrantyMonths.toString()
+                payload.warranty_period = parseInt(productData.warrantyMonths)
             }
 
-            // Add serial numbers if warranty is enabled and serial numbers exist
-            if (productData.hasWarranty && productData.serialNumbers && productData.serialNumbers.length > 0) {
-                apiPayload.serial_numbers = productData.serialNumbers
-            }
-
-            console.log('Sending product data to API:', apiPayload)
-
-            const apiUrl = isUpdate 
-                ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/update/${productData.productId}/`
-                : `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/create/`
+            // Add commission info (for both variants and simple products)
+            payload.commission_type = productData.productForm.commissionType === "percent" ? "percentage" : "fixed"
+            payload.commission_value = parseFloat(productData.productForm.commissionValue) || 0
             
-            console.log(`${isUpdate ? 'Updating' : 'Creating'} product, API URL:`, apiUrl)
+            console.log('💰 Commission info:', {
+                commissionType: productData.productForm.commissionType,
+                commissionValue: productData.productForm.commissionValue,
+                payloadType: payload.commission_type,
+                payloadValue: payload.commission_value
+            })
 
-            // Call the API
-            const response = await fetch(apiUrl, {
-                method: isUpdate ? 'PUT' : 'POST',
+            // Handle variants vs simple product
+            if (hasVariants) {
+                // Variants payload - one variant per subbrand with multiple models
+                payload.variants = productData.variants.map(variant => ({
+                    subbrand: parseInt(variant.subBrandId),
+                    model: variant.selectedModels.map(id => parseInt(id)), // Array of model IDs
+                    selling_price: parseFloat(variant.sellingPrice),
+                    minimum_selling_price: parseFloat(variant.minSellingPrice) || 0,
+                    minimum_quantity: parseInt(variant.minQtyAlert) || 5
+                }))
+            } else {
+                // Simple product payload
+                payload.selling_price = parseFloat(productData.productForm.sellingPrice)
+                payload.minimum_selling_price = parseFloat(productData.productForm.minSellingPrice) || 0
+                payload.minimum_quantity = parseInt(productData.productForm.minQtyAlert) || 5
+            }
+
+            console.log('🔥 Saving product with payload:', payload)
+            console.log('📝 Edit mode:', editMode)
+            console.log('🆔 Product ID:', productData.productId)
+
+            // Use different endpoint for create vs update
+            const url = editMode && productData.productId 
+                ? `${baseUrl}/api/product/update/${productData.productId}/`
+                : `${baseUrl}/api/product/create/`
+            
+            const method = editMode && productData.productId ? 'PUT' : 'POST'
+
+            const response = await fetch(url, {
+                method: method,
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
+                    ...(token && { 'Authorization': `Bearer ${token}` })
                 },
-                credentials: 'omit',
-                body: JSON.stringify(apiPayload)
+                body: JSON.stringify(payload)
             })
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}))
-                throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+                const errorData = await response.json()
+                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
             }
 
-            const responseData = await response.json()
-            console.log(`Product ${isUpdate ? 'updated' : 'created'} successfully:`, responseData)
+            const result = await response.json()
+            console.log(`✅ Product ${editMode ? 'updated' : 'created'} successfully:`, result)
 
             setSaveSuccess(true)
-
             toast({
                 title: "Success",
-                description: `Product "${productData.productForm.name}" ${isUpdate ? 'updated' : 'created'} successfully!`,
-                variant: "default",
+                description: `Product "${productData.productForm.name}" ${editMode ? 'updated' : 'created'} successfully!`,
             })
 
-            // Auto-print barcodes if available in response
-            if (responseData.barcodes && Array.isArray(responseData.barcodes) && responseData.barcodes.length > 0) {
-                console.log('Auto-printing barcodes:', responseData.barcodes)
-
-                // Calculate total barcodes to print
-                const totalBarcodes = responseData.barcodes.reduce((total, item) => {
-                    return total + (parseInt(item.qty) || 0)
-                }, 0)
-
-                if (totalBarcodes > 0) {
-                    setTimeout(() => {
-                        try {
-                            printBarcodes(responseData.barcodes)
-                            toast({
-                                title: "Barcodes Printing",
-                                description: `Printing ${totalBarcodes} scannable barcodes for ${responseData.barcodes.length} branch(es)...`,
-                                className: "bg-blue-50 border-blue-200 text-blue-800",
-                            })
-                        } catch (error) {
-                            console.error('Barcode printing error:', error)
-                            toast({
-                                title: "Barcode Print Error",
-                                description: `Failed to print barcodes: ${error.message || 'Unknown error'}`,
-                                variant: "destructive",
-                            })
-                        }
-                    }, 1500) // Small delay to let user see success message
-                } else {
-                    // Barcodes array exists but quantities are 0
-                    setTimeout(() => {
-                        toast({
-                            title: "No Barcodes to Print",
-                            description: `Product ${isUpdate ? 'updated' : 'created'} successfully but barcode quantities are zero.`,
-                            className: "bg-yellow-50 border-yellow-200 text-yellow-800",
-                        })
-                    }, 1500)
-                }
-            } else {
-                // No barcodes in response or invalid format
-                setTimeout(() => {
-                    toast({
-                        title: "No Barcodes to Print",
-                        description: `Product ${isUpdate ? 'updated' : 'created'} successfully but no barcodes were generated by the system.`,
-                        className: "bg-yellow-50 border-yellow-200 text-yellow-800",
-                    })
-                }, 1500)
-            }
-
-            // Callback for parent
             if (typeof onSaved === "function") {
-                const payload = {
+                onSaved({
                     category: categoryName,
                     subcategory: productData.selectedSubcategory,
                     gender: productData.selectedGender,
                     brand: productData.selectedBrand,
-                    subBrand: productData.selectedSubBrand,
-                    model: productData.selectedModel,
-                    glassType: productData.selectedGlassType,
-                    type: productData.selectedType,
-                    form: { ...productData.productForm, serialNumbers: productData.serialNumbers, hasWarranty: productData.hasWarranty, warrantyMonths: productData.warrantyMonths },
-                    apiResponse: responseData
-                }
-                onSaved(payload)
+                    form: productData.productForm,
+                    variants: productData.variants
+                })
             }
 
             setTimeout(() => {
                 setSaveSuccess(false)
-                if (!editMode) {
-                    resetForm()
-                }
+                if (!editMode) resetForm()
                 if (typeof onClose === "function") onClose()
             }, 2000)
 
         } catch (error) {
-            console.error('Error creating product:', error)
+            console.error('❌ Error saving product:', error)
             setSaveSuccess(false)
-
-            toast({
-                title: "Error",
-                description: `Failed to create product: ${error.message}`,
-                variant: "destructive",
-            })
+            toast({ title: "Error", description: error.message, variant: "destructive" })
         } finally {
             setIsSaving(false)
         }
     }
 
-    const showModelsDropdown = categoryName === "Tuffun"
-    const showCableType = (categoryName === "Earphone" || categoryName === "Headphone") && productData.selectedSubcategory === "Wired"
-    const showChargerType = categoryName === "Charger"
-    const showCapacity = categoryName === "Power Bank"
 
     return (
-        <div className="space-y-4">
-            <div>
-                <h3 className="text-lg font-semibold text-foreground">Product Details</h3>
-                <p className="text-sm text-muted-foreground">
-                    Category: <span className="font-medium text-foreground">{categoryName}</span>
+        <div className="space-y-6">
+            {/* Header with selection summary */}
+            <div className="bg-muted/30 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-foreground mb-2">Product Details</h3>
+                <div className="flex flex-wrap gap-2 text-sm">
+                    {categoryName && (
+                        <span className="bg-primary/10 text-primary px-2 py-1 rounded">{categoryName}</span>
+                    )}
                     {productData.selectedSubcategory && (
-                        <>
-                            {" • "}
-                            Subcategory: <span className="font-medium text-foreground">{productData.selectedSubcategory}</span>
-                        </>
+                        <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">{productData.selectedSubcategory}</span>
                     )}
                     {productData.selectedGender && (
-                        <>
-                            {" • "}
-                            Gender: <span className="font-medium text-foreground capitalize">{productData.selectedGender}</span>
-                        </>
+                        <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded capitalize">{productData.selectedGender}</span>
                     )}
                     {productData.selectedBrand && (
-                        <>
-                            {" • "}
-                            Brand: <span className="font-medium text-foreground">{productData.selectedBrand}</span>
-                        </>
+                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded">{productData.selectedBrand}</span>
                     )}
-                </p>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Main Form Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Product Name */}
                 <div className="space-y-2">
-                    <label className="text-sm text-foreground">Product name</label>
+                    <label className="text-sm font-medium text-foreground">Product Name *</label>
                     <input
                         className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
                         value={productData.productForm.name}
@@ -878,177 +665,38 @@ export default function ProductForm({
                     />
                 </div>
 
+                {/* HSN Code */}
                 <div className="space-y-2">
-                    <label className="text-sm text-foreground">HSN</label>
-                    {hsnLoading ? (
-                        <div className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
-                            Loading HSN codes...
-                        </div>
-                    ) : (
-                        <select
-                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={productData.productForm.hsn}
-                            onChange={(e) => updateProductData({
-                                productForm: { ...productData.productForm, hsn: e.target.value }
-                            })}
-                        >
-                            <option value="">Select HSN</option>
-                            {hsnData.map((hsn) => (
-                                <option key={hsn.id} value={hsn.code}>
-                                    {hsn.code} - {hsn.description || 'No description'}
-                                </option>
-                            ))}
-                        </select>
+                    <label className="text-sm font-medium text-foreground">HSN Code</label>
+                    <input
+                        type="text"
+                        className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none cursor-not-allowed"
+                        value={productData.productForm.hsn || (hsnCommissionData?.hsn?.hsn_code || "")}
+                        readOnly
+                        disabled
+                    />
+                    {hsnCommissionData?.hsn && (
+                        <p className="text-xs text-muted-foreground">
+                            {hsnCommissionData.hsn.category}
+                        </p>
                     )}
                 </div>
 
+                {/* Warranty */}
                 <div className="space-y-2">
-                    <label className="text-sm text-foreground">Vendor</label>
-                    {vendorsLoading ? (
-                        <div className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
-                            Loading vendors...
-                        </div>
-                    ) : (
-                        <select
-                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={productData.productForm.vendor}
-                            onChange={(e) => updateProductData({
-                                productForm: { ...productData.productForm, vendor: e.target.value }
-                            })}
-                        >
-                            <option value="">Select vendor</option>
-                            {vendorsData.map((vendor) => (
-                                <option key={vendor.id} value={vendor.name}>
-                                    {vendor.name}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                </div>
-
-                {showModelsDropdown && (
-                    <div className="space-y-2 md:col-span-2">
-                        <label className="text-sm text-foreground">Models</label>
-                        <div className="space-y-2">
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                                    placeholder="Type to search models..."
-                                    value={selectedModelToAdd}
-                                    onChange={(e) => setSelectedModelToAdd(e.target.value)}
-                                />
-                                <Button
-                                    type="button"
-                                    onClick={() => addModelToSelected(selectedModelToAdd)}
-                                    disabled={!selectedModelToAdd}
-                                >
-                                    Add
-                                </Button>
-                            </div>
-
-                            {productData.productForm.selectedModels.length > 0 && (
-                                <div className="flex flex-wrap gap-2 rounded-md border border-border bg-muted/30 p-2">
-                                    {productData.productForm.selectedModels.map((model, idx) => (
-                                        <div
-                                            key={idx}
-                                            className="inline-flex items-center gap-1.5 rounded bg-background px-2.5 py-1.5 text-sm border border-border"
-                                        >
-                                            <span className="text-foreground">{model}</span>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-4 w-4 hover:bg-destructive/10"
-                                                onClick={() => {
-                                                    updateProductData({
-                                                        productForm: {
-                                                            ...productData.productForm,
-                                                            selectedModels: productData.productForm.selectedModels.filter((m) => m !== model)
-                                                        }
-                                                    })
-                                                }}
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </Button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {showCableType && (
-                    <div className="space-y-2">
-                        <label className="text-sm text-foreground">Cable Type</label>
-                        <select
-                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={productData.productForm.cableType}
-                            onChange={(e) => updateProductData({
-                                productForm: { ...productData.productForm, cableType: e.target.value }
-                            })}
-                        >
-                            <option value="">Select type</option>
-                            <option value="TypeC">Type C</option>
-                            <option value="Lightning">Lightning</option>
-                        </select>
-                    </div>
-                )}
-
-                {showChargerType && (
-                    <div className="space-y-2">
-                        <label className="text-sm text-foreground">Charger Type</label>
-                        <select
-                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={productData.productForm.chargerType}
-                            onChange={(e) => updateProductData({
-                                productForm: { ...productData.productForm, chargerType: e.target.value }
-                            })}
-                        >
-                            <option value="">Select type</option>
-                            <option value="TypeC">Type C</option>
-                            <option value="Lightning">Lightning</option>
-                        </select>
-                    </div>
-                )}
-
-                {showCapacity && (
-                    <div className="space-y-2">
-                        <label className="text-sm text-foreground">Capacity</label>
-                        <select
-                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={productData.productForm.capacity}
-                            onChange={(e) => updateProductData({
-                                productForm: { ...productData.productForm, capacity: e.target.value }
-                            })}
-                        >
-                            <option value="">Select capacity</option>
-                            <option value="3000mAh">3000mAh</option>
-                            <option value="5000mAh">5000mAh</option>
-                            <option value="10000mAh">10000mAh</option>
-                            <option value="20000mAh">20000mAh</option>
-                        </select>
-                    </div>
-                )}
-
-                <div className="space-y-2">
-                    <label className="text-sm text-foreground flex items-center gap-2">
+                    <label className="text-sm font-medium text-foreground flex items-center gap-2">
                         <span>Warranty</span>
                         <label className="relative inline-flex items-center cursor-pointer">
                             <input
                                 type="checkbox"
                                 className="sr-only peer"
                                 checked={productData.hasWarranty}
-                                onChange={(e) => {
-                                    updateProductData({
-                                        hasWarranty: e.target.checked,
-                                        warrantyMonths: e.target.checked ? productData.warrantyMonths : "",
-                                        serialNumbers: e.target.checked ? productData.serialNumbers : []
-                                    })
-                                }}
+                                onChange={(e) => updateProductData({
+                                    hasWarranty: e.target.checked,
+                                    warrantyMonths: e.target.checked ? productData.warrantyMonths : ""
+                                })}
                             />
-                            <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                            <div className="w-9 h-5 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                         </label>
                     </label>
                     {productData.hasWarranty && (
@@ -1057,7 +705,7 @@ export default function ProductForm({
                             value={productData.warrantyMonths}
                             onChange={(e) => updateProductData({ warrantyMonths: e.target.value })}
                         >
-                            <option value="">Select warranty period</option>
+                            <option value="">Select period</option>
                             <option value="3">3 Months</option>
                             <option value="6">6 Months</option>
                             <option value="9">9 Months</option>
@@ -1065,218 +713,288 @@ export default function ProductForm({
                         </select>
                     )}
                 </div>
+            </div>
 
-                {productData.hasWarranty && (
-                    <div className="space-y-2 md:col-span-2">
-                        <label className="text-sm text-foreground">Serial number</label>
-                        <div className="space-y-2">
-                            <div className="flex gap-2">
-                                <input
-                                    ref={serialInputRef}
-                                    className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                                    value={serialInput}
-                                    onChange={handleSerialInput}
-                                    onKeyDown={handleSerialKeyDown}
-                                    placeholder="Scan barcode or type serial number and press Enter"
-                                    autoComplete="off"
-                                />
-                                <Button type="button" onClick={addSerialNumber} disabled={!serialInput.trim()}>
-                                    <Plus className="h-4 w-4" />
-                                </Button>
-                            </div>
-
-                            {productData.serialNumbers.length > 0 && (
-                                <div className="flex flex-wrap gap-2 rounded-md border border-border bg-muted/30 p-2 max-h-40 overflow-y-auto">
-                                    {productData.serialNumbers.map((serial, idx) => (
-                                        <div
-                                            key={idx}
-                                            className="inline-flex items-center gap-1.5 rounded bg-background px-2.5 py-1.5 text-sm border border-border"
-                                        >
-                                            <span className="font-mono text-foreground">{serial}</span>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-4 w-4 hover:bg-destructive/10"
-                                                onClick={() => removeSerialNumber(idx)}
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </Button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                <div className="space-y-2">
-                    <label className="text-sm text-foreground">Purchase price</label>
+            {/* Commission Section */}
+            <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Commission</label>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant={productData.productForm.commissionType === "fixed" ? "default" : "secondary"}
+                        onClick={() => updateProductData({
+                            productForm: { ...productData.productForm, commissionType: "fixed" }
+                        })}
+                    >
+                        ₹
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant={productData.productForm.commissionType === "percent" ? "default" : "secondary"}
+                        onClick={() => updateProductData({
+                            productForm: { ...productData.productForm, commissionType: "percent" }
+                        })}
+                    >
+                        %
+                    </Button>
                     <input
                         type="number"
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        value={productData.productForm.purchasePrice}
+                        className="w-32 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        value={productData.productForm.commissionValue || ""}
                         onChange={(e) => updateProductData({
-                            productForm: { ...productData.productForm, purchasePrice: e.target.value }
+                            productForm: { ...productData.productForm, commissionValue: e.target.value }
                         })}
-                        placeholder="0"
+                        placeholder={productData.productForm.commissionType === "percent" ? "%" : "₹"}
                     />
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-sm text-foreground">Selling price</label>
-                    <input
-                        type="number"
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        value={productData.productForm.sellingPrice}
-                        onChange={(e) => updateProductData({
-                            productForm: { ...productData.productForm, sellingPrice: e.target.value }
-                        })}
-                        placeholder="0"
-                    />
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-sm text-foreground">Minimum selling price</label>
-                    <input
-                        type="number"
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        value={productData.productForm.minSellingPrice}
-                        onChange={(e) => updateProductData({
-                            productForm: { ...productData.productForm, minSellingPrice: e.target.value }
-                        })}
-                        placeholder="0"
-                    />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                    <label className="text-sm text-foreground">Branches</label>
-                    {branchesLoading ? (
-                        <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                            Loading branches...
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {branches.map((b) => {
-                                const checked = productData.productForm.selectedBranches.includes(b)
-                                return (
-                                    <label
-                                        key={b}
-                                        className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 cursor-pointer"
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            className="h-4 w-4 accent-primary"
-                                            checked={checked}
-                                            onChange={(e) => {
-                                                const isChecked = e.target.checked
-                                                const nextSelected = isChecked
-                                                    ? [...productData.productForm.selectedBranches, b]
-                                                    : productData.productForm.selectedBranches.filter((x) => x !== b)
-                                                const nextQty = { ...productData.productForm.branchQuantities }
-                                                if (isChecked) {
-                                                    if (nextQty[b] == null) nextQty[b] = "0"
-                                                } else {
-                                                    delete nextQty[b]
-                                                }
-                                                updateProductData({
-                                                    productForm: {
-                                                        ...productData.productForm,
-                                                        selectedBranches: nextSelected,
-                                                        branchQuantities: nextQty
-                                                    }
-                                                })
-                                            }}
-                                        />
-                                        <span className="text-sm text-foreground">{b}</span>
-                                    </label>
-                                )
-                            })}
-                        </div>
-                    )}
-                </div>
-
-                {productData.productForm.selectedBranches.length > 0 && (
-                    <div className="space-y-2 md:col-span-2">
-                        <label className="text-sm text-foreground">Quantities per branch</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {productData.productForm.selectedBranches.map((b) => (
-                                <div key={b} className="space-y-1">
-                                    <div className="text-xs text-muted-foreground">{b}</div>
-                                    <input
-                                        type="number"
-                                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                                        value={productData.productForm.branchQuantities[b] ?? "0"}
-                                        onChange={(e) =>
-                                            updateProductData({
-                                                productForm: {
-                                                    ...productData.productForm,
-                                                    branchQuantities: { ...productData.productForm.branchQuantities, [b]: e.target.value }
-                                                }
-                                            })
-                                        }
-                                        placeholder="0"
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                <div className="space-y-2">
-                    <label className="text-sm text-foreground">Minimum quantity alert</label>
-                    <input
-                        type="number"
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        value={productData.productForm.minQtyAlert}
-                        onChange={(e) => updateProductData({
-                            productForm: { ...productData.productForm, minQtyAlert: e.target.value }
-                        })}
-                        placeholder="0"
-                    />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                    <label className="text-sm text-foreground">Commission</label>
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <Button
-                            type="button"
-                            variant={productData.productForm.commissionType === "fixed" ? "default" : "secondary"}
-                            onClick={() => updateProductData({
-                                productForm: { ...productData.productForm, commissionType: "fixed" }
-                            })}
-                        >
-                            ₹
-                        </Button>
-                        <Button
-                            type="button"
-                            variant={productData.productForm.commissionType === "percent" ? "default" : "secondary"}
-                            onClick={() => updateProductData({
-                                productForm: { ...productData.productForm, commissionType: "percent" }
-                            })}
-                        >
-                            %
-                        </Button>
-                        <input
-                            type="number"
-                            className="w-48 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={productData.productForm.commissionValue}
-                            onChange={(e) => updateProductData({
-                                productForm: { ...productData.productForm, commissionValue: e.target.value }
-                            })}
-                            placeholder={productData.productForm.commissionType === "percent" ? "Percent" : "Amount"}
-                        />
-                        {commissionPreview && (
-                            <div className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded-md">
-                                Preview: <span className="font-medium text-foreground">{commissionPreview}</span>
-                            </div>
-                        )}
-                    </div>
                 </div>
             </div>
 
-            <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">Review and save product</div>
+            {/* VARIANT CATEGORIES: Cover, Tuffun, Camera Ring */}
+            {hasVariants ? (
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h4 className="text-md font-semibold text-foreground">Product Variants</h4>
+                            <p className="text-xs text-muted-foreground">
+                                Add model-wise variants • <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+B</kbd> New Sub Brand • <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+M</kbd> New Model
+                            </p>
+                        </div>
+                        <Button size="sm" onClick={addVariant}>
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add Variant
+                        </Button>
+                    </div>
+
+                    {/* Variants Table */}
+                    {(productData.variants || []).length > 0 ? (
+                        <div className="border border-border rounded-lg overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-muted/50">
+                                        <tr>
+                                            <th className="text-left px-3 py-2 font-medium text-foreground">Sub Brand</th>
+                                            <th className="text-left px-3 py-2 font-medium text-foreground">Models *</th>
+                                            <th className="text-left px-3 py-2 font-medium text-foreground w-28">Selling Price *</th>
+                                            <th className="text-left px-3 py-2 font-medium text-foreground w-28">Min Selling Price</th>
+                                            <th className="text-left px-3 py-2 font-medium text-foreground w-24">Min Qty Alert</th>
+                                            <th className="text-center px-3 py-2 font-medium text-foreground w-14"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border">
+                                        {(productData.variants || []).map((variant) => (
+                                            <tr key={variant.id} className="hover:bg-muted/20">
+                                                {/* Sub Brand */}
+                                                <td className="px-3 py-2">
+                                                    <div className="flex items-center gap-1">
+                                                        <select
+                                                            className="flex-1 rounded border border-border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                                                            value={variant.subBrandId}
+                                                            onChange={(e) => updateVariant(variant.id, 'subBrandId', e.target.value)}
+                                                            disabled={subBrandsLoading}
+                                                        >
+                                                            <option value="">Select</option>
+                                                            {getAvailableSubBrands(variant.id).map((sb) => (
+                                                                <option key={sb.id} value={sb.id}>{sb.name}</option>
+                                                            ))}
+                                                        </select>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-7 w-7 shrink-0"
+                                                            onClick={() => setShowSubBrandModal(true)}
+                                                        >
+                                                            <Plus className="h-3 w-3" />
+                                                        </Button>
+                                                    </div>
+                                                </td>
+
+                                                {/* Model Multi-Select */}
+                                                <td className="px-3 py-2">
+                                                    <div className="flex items-center gap-1">
+                                                        <div className="flex-1">
+                                                            <div className="min-h-[34px] rounded border border-border bg-background px-2 py-1.5 text-sm outline-none focus-within:ring-1 focus-within:ring-primary">
+                                                                {/* Selected Models Display */}
+                                                                {variant.selectedModelNames && variant.selectedModelNames.length > 0 ? (
+                                                                    <div className="flex flex-wrap gap-1 mb-1">
+                                                                        {variant.selectedModelNames.map((modelName, idx) => (
+                                                                            <span key={idx} className="inline-flex items-center gap-1 bg-primary/10 text-primary px-1.5 py-0.5 rounded text-xs">
+                                                                                {modelName}
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        const modelId = models.find(m => m.name === modelName)?.id
+                                                                                        if (modelId) toggleModelInVariant(variant.id, modelId)
+                                                                                    }}
+                                                                                    className="hover:bg-primary/20 rounded"
+                                                                                >
+                                                                                    <X className="h-3 w-3" />
+                                                                                </button>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="text-muted-foreground text-sm py-1">
+                                                                        {variant.subBrandId ? "Select models..." : "Select sub-brand first"}
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {/* Add Models Button */}
+                                                                {variant.subBrandId && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="cursor-pointer text-xs text-primary hover:text-primary/80"
+                                                                        onClick={() => openModelDropdown(variant.id)}
+                                                                    >
+                                                                        + Add Models
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-7 w-7 shrink-0"
+                                                            onClick={() => {
+                                                                const variant = (productData.variants || []).find(v => v.id === variant.id)
+                                                                if (variant?.subBrandId) {
+                                                                    setSelectedSubBrandForModel(variant.subBrandId)
+                                                                    setShowModelModal(true)
+                                                                } else {
+                                                                    toast({ title: "Select Sub Brand", description: "Please select a sub-brand first", variant: "destructive" })
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Plus className="h-3 w-3" />
+                                                        </Button>
+                                                    </div>
+                                                </td>
+
+                                                {/* Selling Price */}
+                                                <td className="px-3 py-2">
+                                                    <div className="relative">
+                                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            className="w-full rounded border border-border bg-background pl-5 pr-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                                                            value={variant.sellingPrice}
+                                                            onChange={(e) => updateVariant(variant.id, 'sellingPrice', e.target.value)}
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
+                                                </td>
+
+                                                {/* Min Selling Price */}
+                                                <td className="px-3 py-2">
+                                                    <div className="relative">
+                                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            className="w-full rounded border border-border bg-background pl-5 pr-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                                                            value={variant.minSellingPrice}
+                                                            onChange={(e) => updateVariant(variant.id, 'minSellingPrice', e.target.value)}
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
+                                                </td>
+
+                                                {/* Min Qty Alert */}
+                                                <td className="px-3 py-2">
+                                                    <input
+                                                        type="number"
+                                                        className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                                                        value={variant.minQtyAlert}
+                                                        onChange={(e) => updateVariant(variant.id, 'minQtyAlert', e.target.value)}
+                                                        placeholder="5"
+                                                    />
+                                                </td>
+
+                                                {/* Delete */}
+                                                <td className="px-3 py-2 text-center">
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                        onClick={() => removeVariant(variant.id)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="border border-dashed border-border rounded-lg p-8 text-center">
+                            <p className="text-muted-foreground mb-3">No variants added yet</p>
+                            <Button variant="outline" size="sm" onClick={addVariant}>
+                                <Plus className="h-4 w-4 mr-1" />
+                                Add First Variant
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                /* NON-VARIANT CATEGORIES: Simple pricing fields */
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/20 rounded-lg">
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">Selling Price *</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
+                            <input
+                                type="number"
+                                className="w-full rounded-md border border-border bg-background pl-8 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                value={productData.productForm.sellingPrice || ""}
+                                onChange={(e) => updateProductData({
+                                    productForm: { ...productData.productForm, sellingPrice: e.target.value }
+                                })}
+                                placeholder="0"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">Min Selling Price</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
+                            <input
+                                type="number"
+                                className="w-full rounded-md border border-border bg-background pl-8 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                value={productData.productForm.minSellingPrice || ""}
+                                onChange={(e) => updateProductData({
+                                    productForm: { ...productData.productForm, minSellingPrice: e.target.value }
+                                })}
+                                placeholder="0"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">Min Qty Alert</label>
+                        <input
+                            type="number"
+                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                            value={productData.productForm.minQtyAlert || ""}
+                            onChange={(e) => updateProductData({
+                                productForm: { ...productData.productForm, minQtyAlert: e.target.value }
+                            })}
+                            placeholder="5"
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between pt-4 border-t border-border">
+                <div className="text-xs text-muted-foreground">
+                    {hasVariants ? `${(productData.variants || []).length} variant(s)` : "Simple product"}
+                </div>
                 <div className="flex gap-2">
                     {!editMode && (
                         <Button variant="secondary" onClick={prevStep}>
@@ -1290,6 +1008,134 @@ export default function ProductForm({
                     </Button>
                 </div>
             </div>
+
+            {/* Model Selection Modal */}
+            {activeModelDropdown && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-background rounded-lg shadow-lg w-full max-w-md p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold">Select Models</h3>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={closeModelDropdown}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        
+                        {/* Search Input */}
+                        {!modelsLoading && models.length > 0 && (
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <input
+                                    type="search"
+                                    className="w-full rounded-md border border-border bg-background pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="Search models..."
+                                    value={modelSearchTerm}
+                                    onChange={(e) => setModelSearchTerm(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                        )}
+                        
+                        <div className="max-h-60 overflow-y-auto space-y-2">
+                            {modelsLoading ? (
+                                <div className="text-center py-4 text-muted-foreground">Loading models...</div>
+                            ) : filteredModels.length === 0 ? (
+                                <div className="text-center py-4 text-muted-foreground text-sm">
+                                    {modelSearchTerm ? `No models found for "${modelSearchTerm}"` : "No models found"}
+                                </div>
+                            ) : (
+                                filteredModels.map((model) => {
+                                    const variant = (productData.variants || []).find(v => v.id === activeModelDropdown)
+                                    const isSelected = variant?.selectedModels?.includes(model.id) || false
+                                    return (
+                                        <label key={model.id} className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 accent-primary"
+                                                checked={isSelected}
+                                                onChange={() => toggleModelInVariant(activeModelDropdown, model.id)}
+                                            />
+                                            <span className="text-sm">{model.name}</span>
+                                        </label>
+                                    )
+                                })
+                            )}
+                        </div>
+                        <div className="flex justify-end">
+                            <Button onClick={closeModelDropdown}>Done</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Model Modal */}
+            {showModelModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-background rounded-lg shadow-lg w-full max-w-md p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold">Add New Model</h3>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowModelModal(false)}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Model Name</label>
+                            <input
+                                type="text"
+                                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                value={newModelName}
+                                onChange={(e) => setNewModelName(e.target.value)}
+                                placeholder="e.g., iPhone 16 Pro Max"
+                                autoFocus
+                                onKeyDown={(e) => { if (e.key === 'Enter' && !isAddingModel) handleAddModel() }}
+                                disabled={isAddingModel}
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="secondary" onClick={() => setShowModelModal(false)} disabled={isAddingModel}>
+                                Cancel
+                            </Button>
+                            <Button onClick={handleAddModel} disabled={!newModelName.trim() || isAddingModel}>
+                                {isAddingModel ? "Adding..." : "Add Model"}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Sub Brand Modal */}
+            {showSubBrandModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-background rounded-lg shadow-lg w-full max-w-md p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold">Add New Sub Brand</h3>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowSubBrandModal(false)}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Sub Brand Name</label>
+                            <input
+                                type="text"
+                                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                value={newSubBrandName}
+                                onChange={(e) => setNewSubBrandName(e.target.value)}
+                                placeholder="e.g., Ultra Premium"
+                                autoFocus
+                                onKeyDown={(e) => { if (e.key === 'Enter' && !isAddingSubBrand) handleAddSubBrand() }}
+                                disabled={isAddingSubBrand}
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="secondary" onClick={() => setShowSubBrandModal(false)} disabled={isAddingSubBrand}>
+                                Cancel
+                            </Button>
+                            <Button onClick={handleAddSubBrand} disabled={!newSubBrandName.trim() || isAddingSubBrand}>
+                                {isAddingSubBrand ? "Adding..." : "Add Sub Brand"}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

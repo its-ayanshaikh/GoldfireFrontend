@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardHeader, CardTitle } from "../../ui/card"
 import { Badge } from "../../ui/badge"
 
 import {
-  X,
   Smartphone,
   Shield,
   Headphones,
@@ -22,7 +21,8 @@ import {
   Droplets,
   Monitor,
   Layers,
-  Magnet
+  Magnet,
+  Search
 } from "lucide-react"
 
 export default function CategorySelection({
@@ -30,18 +30,15 @@ export default function CategorySelection({
   updateProductData,
   nextStep,
   categories,
-  categoriesData,
-  editMode
+  categoriesLoading = false
 }) {
   const [searchTerm, setSearchTerm] = useState("")
-  const [categoriesLoading, setCategoriesLoading] = useState(true)
-  const [categoriesError, setCategoriesError] = useState(null)
 
   // Category icons mapping
   const getCategoryIcon = (categoryName) => {
     const iconMap = {
       'Cover': Smartphone,
-      'Tuff': Shield,
+      'Tuffun': Shield,
       'Earphone': Headphones,
       'Headphone': Headphones,
       'Buds': Headphones,
@@ -64,58 +61,55 @@ export default function CategorySelection({
     return iconMap[categoryName] || Shield
   }
 
-  useEffect(() => {
-    if (categories.length > 0) {
-      setCategoriesLoading(false)
-    }
-  }, [categories])
-
   const handleCategorySelect = (categoryIndex) => {
-    // If changing category, clear all subsequent data
+    console.log('🔥 CATEGORY SELECTED! 🔥')
+    console.log('Selected categoryIndex:', categoryIndex)
+    console.log('Category name:', categories[categoryIndex])
+    console.log('Current productData.selectedCategory:', productData.selectedCategory)
+    console.log('nextStep function:', nextStep)
+    
     if (productData.selectedCategory !== categoryIndex) {
+      console.log('Updating category and clearing data...')
       updateProductData({
         selectedCategory: categoryIndex,
-        // Clear all subsequent selections
         selectedSubcategory: null,
         selectedSubcategoryId: null,
         selectedGender: null,
         selectedBrand: null,
         selectedBrandId: null,
-        selectedSubBrand: null,
-        selectedSubBrandId: null,
-        selectedModel: null,
-        selectedModelId: null,
-        selectedGlassType: null,
-        selectedGlassTypeId: null,
-        selectedType: null,
-        selectedTypeId: null,
-        // Clear form data
-        productForm: {
-          name: "",
+        productForm: { 
+          name: "", 
           hsn: "",
-          vendor: "",
-          minSellingPrice: "",
-          purchasePrice: "",
           sellingPrice: "",
+          minSellingPrice: "",
           minQtyAlert: "",
-          commissionType: "fixed",
+          commissionType: "percent",
           commissionValue: "",
-          selectedBranches: [],
-          branchQuantities: {},
-          chargerType: "",
-          cableType: "",
-          capacity: "",
-          selectedModels: [],
         },
-        serialNumbers: [],
         hasWarranty: false,
-        warrantyMonths: ""
+        warrantyMonths: "",
+        variants: []
       })
     } else {
+      console.log('Same category selected, just updating...')
       updateProductData({ selectedCategory: categoryIndex })
     }
-    setTimeout(() => nextStep(), 300)
+    
+    console.log('Calling nextStep in 300ms...')
+    setTimeout(() => {
+      console.log('🚀 NextStep called!')
+      try {
+        nextStep()
+        console.log('✅ NextStep executed successfully!')
+      } catch (error) {
+        console.error('❌ NextStep failed:', error)
+      }
+    }, 300)
   }
+
+  const filteredCategories = categories.filter((c) =>
+    c.toLowerCase().includes(searchTerm.toLowerCase())
+  )
 
   if (categoriesLoading) {
     return (
@@ -130,40 +124,28 @@ export default function CategorySelection({
             <span className="animate-pulse" style={{ animationDelay: '1000ms' }}>n</span>
             <span className="animate-pulse" style={{ animationDelay: '1200ms' }}>g</span>
           </div>
-          <p className="text-muted-foreground">Fetching categories...</p>
+          <p className="text-muted-foreground">Loading categories from API...</p>
         </div>
       </div>
     )
   }
-
-  if (categoriesError) {
-    return (
-      <div className="space-y-4">
-        <div className="text-center py-8">
-          <div className="text-red-500 mb-4">
-            <X className="h-12 w-12 mx-auto mb-2" />
-            <p className="font-medium">Failed to load categories</p>
-            <p className="text-sm text-muted-foreground">{categoriesError}</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const filteredCategories = categories.filter((c) =>
-    c.toLowerCase().includes(searchTerm.toLowerCase())
-  )
 
   if (categories.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="text-center py-8">
-          <div className="text-yellow-500 mb-4">
-            <X className="h-12 w-12 mx-auto mb-2" />
-            <p className="font-medium">No categories available</p>
-            <p className="text-sm text-muted-foreground">Please check your connection and try again</p>
+        <Card className="p-8">
+          <div className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="p-3 bg-red-50 rounded-full">
+                <Search className="h-8 w-8 text-red-500" />
+              </div>
+            </div>
+            <p className="text-muted-foreground mb-2">No categories found</p>
+            <p className="text-sm text-muted-foreground">
+              Please check your API connection or contact administrator
+            </p>
           </div>
-        </div>
+        </Card>
       </div>
     )
   }
@@ -171,20 +153,32 @@ export default function CategorySelection({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground">Choose product category</p>
-        <input
-          type="search"
-          className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
-          placeholder="Search category..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+        <div>
+          <p className="text-sm text-muted-foreground">Choose product category</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs">
+              <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+              Cover, Tuffun, Camera Ring have variants
+            </span>
+          </p>
+        </div>
+        <div className="relative w-full max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="search"
+            className="w-full rounded-md border border-border bg-background pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
+            placeholder="Search category..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-        {filteredCategories.map((cat, idx) => {
+        {filteredCategories.map((cat) => {
           const actualIdx = categories.indexOf(cat)
           const isActive = productData.selectedCategory === actualIdx
+          const hasVariants = ["Cover", "Tuffun", "Camera Ring"].includes(cat)
           return (
             <Card
               key={cat}
@@ -210,6 +204,9 @@ export default function CategorySelection({
                   <CardTitle className="text-xs leading-tight">
                     {cat}
                   </CardTitle>
+                  {hasVariants && (
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" title="Has variants"></div>
+                  )}
                   {isActive && (
                     <Badge variant="secondary" className="text-xs px-1 py-0">
                       Selected

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardHeader, CardTitle } from "../../ui/card"
 import { Button } from "../../ui/button"
-import { ChevronLeft, ChevronRight, Plus, Edit, Trash2 } from "lucide-react"
+import { Plus, Edit, Trash2, Search } from "lucide-react"
 import { useToast } from "../../../hooks/use-toast"
 import OverlayModal from "./OverlayModal"
 
@@ -11,17 +11,14 @@ export default function TypeSelection({
   productData, 
   updateProductData, 
   nextStep, 
-  prevStep, 
-  categories, 
-  categoriesData, 
-  editMode 
+  categories,
+  categoriesData
 }) {
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [types, setTypes] = useState([])
   const [typesData, setTypesData] = useState([])
   const [typesLoading, setTypesLoading] = useState(false)
-  const [typesError, setTypesError] = useState(null)
   
   const [modalState, setModalState] = useState({
     open: false,
@@ -32,156 +29,55 @@ export default function TypeSelection({
   })
 
   const categoryName = productData.selectedCategory !== null ? categories[productData.selectedCategory] : null
+  const categoryId = productData.selectedCategory !== null && categoriesData.length > 0 
+    ? categoriesData[productData.selectedCategory]?.id 
+    : null
 
-  // Fetch types when category changes
+  // Fetch types from API when category changes
   useEffect(() => {
-    if (productData.selectedCategory !== null && categories.length > 0 && categoriesData.length > 0) {
-      fetchTypes()
+    if (categoryId) {
+      fetchTypes(categoryId)
     }
-  }, [productData.selectedCategory, categories, categoriesData])
+  }, [categoryId])
 
-  const fetchTypes = async () => {
+  const fetchTypes = async (catId) => {
     try {
-      const token = localStorage.getItem('access_token')
       setTypesLoading(true)
-      setTypesError(null)
-
-      const categoryObj = categoriesData.find(cat => cat.name === categoryName)
-      if (!categoryObj) return
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/type/list/${categoryObj.id}/`, {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
+      const token = localStorage.getItem('access_token')
+      
+      console.log('🔥 Fetching types from Django API...')
+      console.log('Category ID:', catId)
+      console.log('Full API URL:', `${baseUrl}/api/product/type/list/${catId}/`)
+      console.log('Token exists:', !!token)
+      
+      const response = await fetch(`${baseUrl}/api/product/type/list/${catId}/`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-        },
-        credentials: 'omit',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        }
       })
-
-      if (response.ok) {
-        const data = await response.json()
-        setTypesData(data)
-        setTypes(data.map(type => type.name))
-      } else {
+      
+      if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
       
+      const data = await response.json()
+      console.log('✅ Types API Response:', data)
+      console.log('📊 Total types fetched:', data.length)
+      
+      // API returns array of objects with id, name, category, category_name
+      setTypesData(data)
+      setTypes(data.map(type => type.name))
+      
     } catch (error) {
-      console.error('Error fetching types:', error)
-      setTypesError(error.message)
+      console.error('❌ Error fetching types from Django API:', error)
+      // Set empty arrays if API fails
+      setTypesData([])
       setTypes([])
     } finally {
       setTypesLoading(false)
-    }
-  }
-
-  const createType = async (typeName) => {
-    try {
-      const token = localStorage.getItem('access_token')
-      const categoryObj = categoriesData.find(cat => cat.name === categoryName)
-      
-      if (categoryObj) {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/type/create/`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          credentials: 'omit',
-          body: JSON.stringify({
-            name: typeName,
-            category: categoryObj.id
-          })
-        })
-
-        if (response.ok) {
-          await fetchTypes()
-          toast({
-            title: "Success",
-            description: `Type "${typeName}" created successfully.`,
-          })
-          return true
-        }
-      }
-      return false
-      
-    } catch (error) {
-      console.error('Error creating type:', error)
-      toast({
-        title: "Error",
-        description: "Failed to create type",
-        variant: "destructive",
-      })
-      return false
-    }
-  }
-
-  const updateType = async (typeId, newName) => {
-    try {
-      const token = localStorage.getItem('access_token')
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/type/update/${typeId}/`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'omit',
-        body: JSON.stringify({ name: newName })
-      })
-
-      if (response.ok) {
-        await fetchTypes()
-        toast({
-          title: "Success",
-          description: `Type updated successfully.`,
-        })
-        return true
-      }
-      return false
-      
-    } catch (error) {
-      console.error('Error updating type:', error)
-      toast({
-        title: "Error",
-        description: "Failed to update type",
-        variant: "destructive",
-      })
-      return false
-    }
-  }
-
-  const deleteType = async (typeId) => {
-    try {
-      const token = localStorage.getItem('access_token')
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/type/delete/${typeId}/`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'omit',
-      })
-
-      if (response.ok) {
-        await fetchTypes()
-        toast({
-          title: "Success",
-          description: "Type deleted successfully.",
-        })
-        return true
-      }
-      return false
-      
-    } catch (error) {
-      console.error('Error deleting type:', error)
-      toast({
-        title: "Error",
-        description: "Failed to delete type",
-        variant: "destructive",
-      })
-      return false
     }
   }
 
@@ -194,22 +90,98 @@ export default function TypeSelection({
     setModalState(prev => ({ ...prev, isLoading: true }))
 
     try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
+      const token = localStorage.getItem('access_token')
+      
       if (type === "add") {
-        await createType(trimmedValue)
+        console.log('🔥 Creating new type:', trimmedValue)
+        
+        const response = await fetch(`${baseUrl}/api/product/type/create/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` })
+          },
+          body: JSON.stringify({
+            name: trimmedValue,
+            category: categoryId
+          })
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const newType = await response.json()
+        console.log('✅ Type created:', newType)
+        
+        setTypesData(prev => [...prev, newType])
+        setTypes(prev => [...prev, newType.name])
+        toast({ title: "Success", description: `Type "${trimmedValue}" added.` })
+        
+        // Refresh types list
+        setTimeout(() => fetchTypes(categoryId), 500)
+        
       } else if (type === "edit") {
-        const typeObj = typesData.find(t => t.name === types[editIndex])
-        if (typeObj) {
-          await updateType(typeObj.id, trimmedValue)
+        const typeToEdit = typesData[editIndex]
+        console.log('🔥 Updating type:', typeToEdit.id, trimmedValue)
+        
+        const response = await fetch(`${baseUrl}/api/product/type/update/${typeToEdit.id}/`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` })
+          },
+          body: JSON.stringify({
+            name: trimmedValue,
+            category: categoryId
+          })
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
         }
+        
+        const updatedType = await response.json()
+        console.log('✅ Type updated:', updatedType)
+        
+        setTypesData(prev => prev.map((t, i) => i === editIndex ? updatedType : t))
+        setTypes(prev => prev.map((t, i) => i === editIndex ? updatedType.name : t))
+        toast({ title: "Success", description: "Type updated." })
+        
+        // Refresh types list
+        setTimeout(() => fetchTypes(categoryId), 500)
+        
       } else if (type === "delete") {
-        const typeObj = typesData.find(t => t.name === types[editIndex])
-        if (typeObj) {
-          await deleteType(typeObj.id)
+        const typeToDelete = typesData[editIndex]
+        console.log('🔥 Deleting type:', typeToDelete.id)
+        
+        const response = await fetch(`${baseUrl}/api/product/type/delete/${typeToDelete.id}/`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` })
+          }
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
         }
+        
+        console.log('✅ Type deleted')
+        
+        setTypesData(prev => prev.filter((_, i) => i !== editIndex))
+        setTypes(prev => prev.filter((_, i) => i !== editIndex))
+        toast({ title: "Success", description: "Type deleted." })
       }
       closeModal()
     } catch (error) {
-      console.error('Modal save error:', error)
+      console.error('❌ Modal save error:', error)
+      toast({ 
+        title: "Error", 
+        description: `Failed to ${type} type. Please try again.`,
+        variant: "destructive"
+      })
     } finally {
       setModalState(prev => ({ ...prev, isLoading: false }))
     }
@@ -224,7 +196,6 @@ export default function TypeSelection({
   }
 
   const handleTypeSelect = (type) => {
-    // Find the type ID from typesData
     const typeObj = typesData.find(t => t.name === type)
     updateProductData({ 
       selectedType: type,
@@ -237,32 +208,109 @@ export default function TypeSelection({
     t.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  // Loading state
+  if (typesLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">Type</h2>
+            <p className="text-sm text-muted-foreground">
+              Category: <span className="font-medium text-foreground">{categoryName}</span>
+              {productData.selectedSubcategory && (
+                <span> • Subcategory: <span className="font-medium text-foreground">{productData.selectedSubcategory}</span></span>
+              )}
+              {productData.selectedGender && (
+                <span> • Gender: <span className="font-medium text-foreground capitalize">{productData.selectedGender}</span></span>
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="text-center py-8">
+          <div className="flex justify-center items-center space-x-1 text-4xl font-normal text-black tracking-tight mb-4">
+            <span className="animate-pulse" style={{ animationDelay: '0ms' }}>L</span>
+            <span className="animate-pulse" style={{ animationDelay: '200ms' }}>o</span>
+            <span className="animate-pulse" style={{ animationDelay: '400ms' }}>a</span>
+            <span className="animate-pulse" style={{ animationDelay: '600ms' }}>d</span>
+            <span className="animate-pulse" style={{ animationDelay: '800ms' }}>i</span>
+            <span className="animate-pulse" style={{ animationDelay: '1000ms' }}>n</span>
+            <span className="animate-pulse" style={{ animationDelay: '1200ms' }}>g</span>
+          </div>
+          <p className="text-muted-foreground">Loading types from API...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // No types found
+  if (types.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">Type</h2>
+            <p className="text-sm text-muted-foreground">
+              Category: <span className="font-medium text-foreground">{categoryName}</span>
+              {productData.selectedSubcategory && (
+                <span> • Subcategory: <span className="font-medium text-foreground">{productData.selectedSubcategory}</span></span>
+              )}
+              {productData.selectedGender && (
+                <span> • Gender: <span className="font-medium text-foreground capitalize">{productData.selectedGender}</span></span>
+              )}
+            </p>
+          </div>
+          <Button size="sm" onClick={() => openModal("add")}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add
+          </Button>
+        </div>
+        <Card className="p-8">
+          <div className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="p-3 bg-accent rounded-full">
+                <Search className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </div>
+            <p className="text-muted-foreground mb-2">No types found</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Add the first type for {categoryName}
+            </p>
+            <Button onClick={() => openModal("add")}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Type
+            </Button>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Watch Belt Type</h2>
+          <h2 className="text-xl font-semibold text-foreground">Type</h2>
           <p className="text-sm text-muted-foreground">
             Category: <span className="font-medium text-foreground">{categoryName}</span>
             {productData.selectedSubcategory && (
-              <span> | Subcategory: <span className="font-medium text-foreground">{productData.selectedSubcategory}</span></span>
+              <span> • Subcategory: <span className="font-medium text-foreground">{productData.selectedSubcategory}</span></span>
+            )}
+            {productData.selectedGender && (
+              <span> • Gender: <span className="font-medium text-foreground capitalize">{productData.selectedGender}</span></span>
             )}
           </p>
-          {typesLoading && (
-            <p className="text-xs text-muted-foreground">Loading types...</p>
-          )}
-          {typesError && (
-            <p className="text-xs text-red-500">Error: {typesError}</p>
-          )}
         </div>
         <div className="flex items-center gap-2">
-          <input
-            type="search"
-            className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Search type..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="search"
+              className="w-full rounded-md border border-border bg-background pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Search type..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
           <Button size="sm" onClick={() => openModal("add")}>
             <Plus className="h-4 w-4" />
           </Button>

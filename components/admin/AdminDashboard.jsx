@@ -23,6 +23,7 @@ import VendorManagement from "./VendorManagement" // Added VendorManagement impo
 import BranchManagement from "./BranchManagement" // Added BranchManagement import
 import ProductAdd from "./ProductAdd" // Added ProductAdd import
 import ProductList from "./ProductList" // Added ProductList import
+import ProductEdit from "./ProductEdit" // Added ProductEdit import
 import PurchaseAdd from "./PurchaseAdd" // Added PurchaseAdd import
 import PurchaseList from "./PurchaseList" // Added PurchaseList import
 import PurchaseReturn from "./PurchaseReturn" // Added PurchaseReturn import
@@ -143,9 +144,13 @@ const AdminDashboard = ({ view, user, onLogout }) => {
     const mappedView = pathToViewMap[location.pathname] || 'dashboard'
     setCurrentView(mappedView)
 
-    // Handle dynamic routes like /admin/product/123 or /admin/task/456
-    if (location.pathname.match(/\/admin\/product\/\d+/)) {
+    // Handle dynamic routes like /admin/product/edit/123 or /admin/product/123 or /admin/task/456
+    if (location.pathname.match(/\/admin\/product\/edit\/\d+/)) {
+      setCurrentView('product-edit')
+    } else if (location.pathname.match(/\/admin\/product\/\d+/)) {
       setCurrentView('product-view')
+    } else if (location.pathname.match(/\/admin\/purchase\/edit\/\d+/)) {
+      setCurrentView('purchase-add')
     } else if (location.pathname.match(/\/admin\/task\/\d+/)) {
       setCurrentView('task-view')
     }
@@ -380,10 +385,14 @@ const AdminDashboard = ({ view, user, onLogout }) => {
         return <BranchManagement />
       case "product-add":
         return <ProductAdd />
+      case "product-edit":
+        return <ProductEdit />
+      case "product":
       case "product-list":
         return <ProductList />
       case "purchase-add":
         return <PurchaseAdd />
+      case "purchase":
       case "purchase-list":
         return <PurchaseList />
       case "purchase-return":
