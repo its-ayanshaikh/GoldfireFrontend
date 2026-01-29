@@ -151,14 +151,21 @@ const LeaveManagement = () => {
     }
   }
 
-  // Check if selected month is current month or future
+  // Check if selected month is current month or next 2 months (total 3 months allowed)
   const isValidMonth = () => {
     const currentDate = new Date()
     const currentMonth = currentDate.getMonth()
     const currentYear = currentDate.getFullYear()
     
-    // Only allow current month
-    return selectedMonth === currentMonth && selectedYear === currentYear
+    // Calculate the month difference
+    const selectedMonthDate = new Date(selectedYear, selectedMonth, 1)
+    const currentMonthDate = new Date(currentYear, currentMonth, 1)
+    
+    // Calculate difference in months
+    const monthDiff = (selectedYear - currentYear) * 12 + (selectedMonth - currentMonth)
+    
+    // Allow current month (0) and next 2 months (1, 2)
+    return monthDiff >= 0 && monthDiff <= 2
   }
 
   // Fetch leaves from API
@@ -684,8 +691,8 @@ const LeaveManagement = () => {
                 ) : (
                   <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <p className="text-sm text-yellow-800">
-                      <strong>Note:</strong> You can only assign leaves for the current month ({monthNames[new Date().getMonth()]} {new Date().getFullYear()}). 
-                      Please select the current month to assign leaves.
+                      <strong>Note:</strong> You can only assign leaves for the current month and next 2 months. 
+                      Please select a valid month (current or upcoming 2 months) to assign leaves.
                     </p>
                   </div>
                 )}

@@ -556,6 +556,22 @@ const EnhancedAttendanceSystem = () => {
   // Backend already filters, just use employees directly
   const filteredEmployees = employees
 
+  // Helper function to extract time from ISO string (HH:MM:SS format)
+  const extractTimeFromISO = (isoString) => {
+    if (!isoString) return null
+    try {
+      // Format: "2026-01-29T18:56:12+05:30"
+      const date = new Date(isoString)
+      const hours = date.getHours().toString().padStart(2, '0')
+      const minutes = date.getMinutes().toString().padStart(2, '0')
+      const seconds = date.getSeconds().toString().padStart(2, '0')
+      return `${hours}:${minutes}:${seconds}`
+    } catch (error) {
+      console.error('Error parsing time:', error)
+      return null
+    }
+  }
+
   // Helper function to get status badge styling
   const getTodayStatusBadge = (todayStatus) => {
     if (!todayStatus) return null
@@ -777,7 +793,7 @@ const EnhancedAttendanceSystem = () => {
                             {employee.todayStatus.toLowerCase() === 'present' && employee.checkInTime && (
                               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-300 text-xs font-medium">
                                 <Clock className="h-3 w-3" />
-                                {employee.checkInTime}
+                                {extractTimeFromISO(employee.checkInTime)}
                               </div>
                             )}
                           </div>
