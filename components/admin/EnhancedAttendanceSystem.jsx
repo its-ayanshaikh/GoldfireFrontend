@@ -141,7 +141,9 @@ const EnhancedAttendanceSystem = () => {
           phone: employee.phone,
           email: employee.email,
           joiningDate: employee.joining_date,
-          status: employee.status
+          status: employee.status,
+          todayStatus: employee.today_status || null, // Add today_status from API
+          checkInTime: employee.check_in_time || null // Add check_in_time from API
         }))
 
         setEmployees(transformedData)
@@ -554,6 +556,81 @@ const EnhancedAttendanceSystem = () => {
   // Backend already filters, just use employees directly
   const filteredEmployees = employees
 
+  // Helper function to get status badge styling
+  const getTodayStatusBadge = (todayStatus) => {
+    if (!todayStatus) return null
+    
+    const status = todayStatus.toLowerCase()
+    let bgColor = 'bg-gray-100'
+    let textColor = 'text-gray-800'
+    let borderColor = 'border-gray-300'
+    
+    if (status === 'present') {
+      bgColor = 'bg-green-50'
+      textColor = 'text-green-700'
+      borderColor = 'border-green-300'
+    } else if (status === 'absent') {
+      bgColor = 'bg-red-50'
+      textColor = 'text-red-700'
+      borderColor = 'border-red-300'
+    } else if (status === 'on leave' || status === 'leave') {
+      bgColor = 'bg-orange-50'
+      textColor = 'text-orange-700'
+      borderColor = 'border-orange-300'
+    }
+    
+    return { bgColor, textColor, borderColor }
+  }
+
+  // Handle update attendance button click
+  const handleUpdateAttendanceClick = async (e, employee) => {
+    e.stopPropagation() // Prevent card click
+    
+    // Select employee first
+    setSelectedEmployee(employee)
+    
+    // Fetch attendance data for current month
+    await fetchEmployeeAttendance(employee.id, selectedMonth, selectedYear)
+    
+    // After a short delay to ensure data is loaded, open today's edit dialog
+    setTimeout(() => {
+      // Get today's date
+      const today = new Date()
+      const todayDate = today.getDate()
+      const todayFormatted = today.toISOString().split('T')[0] // YYYY-MM-DD
+      
+      // Find today's attendance record from the fetched data
+      const todayRecord = attendanceHistory.find(record => {
+        const recordDate = new Date(record.date)
+        return recordDate.getDate() === todayDate && 
+               recordDate.getMonth() === selectedMonth && 
+               recordDate.getFullYear() === selectedYear
+      })
+      
+      // Create attendance object for today
+      const todayAttendance = todayRecord ? {
+        date: todayDate,
+        fullDate: todayRecord.date,
+        day: today.toLocaleDateString("en-US", { weekday: "short" }),
+        status: todayRecord.status,
+        checkIn: todayRecord.loginTime || '',
+        checkOut: todayRecord.logoutTime || '',
+        breakHours: todayRecord.breakHours || 0
+      } : {
+        date: todayDate,
+        fullDate: todayFormatted,
+        day: today.toLocaleDateString("en-US", { weekday: "short" }),
+        status: 'absent',
+        checkIn: '',
+        checkOut: '',
+        breakHours: 0
+      }
+      
+      // Open edit dialog with today's data
+      handleEditAttendance(todayAttendance)
+    }, 500) // Small delay to ensure attendance data is loaded
+  }
+
   const getStatusBadge = (status) => {
     switch (status) {
       case "present":
@@ -657,38 +734,76 @@ const EnhancedAttendanceSystem = () => {
                   <p className="text-muted-foreground">No employees found</p>
                 </div>
               ) : (
-                filteredEmployees.map((employee) => (
-                  <Card
-                    key={employee.id}
-                    className="cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => handleEmployeeSelect(employee)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-12 w-12">
-                          <AvatarImage src={employee.avatar || "/placeholder.svg"} alt={employee.name} />
-                          <AvatarFallback>
-                            {employee.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="font-medium text-foreground">{employee.name}</div>
-                          <div className="text-sm text-muted-foreground">{employee.role}</div>
-                          <div className="text-sm text-muted-foreground">{employee.branch}</div>
+                filteredEmployees.map((employee) => {
+                  const statusBadge = getTodayStatusBadge(employee.todayStatus)
+                  
+                  return (
+                    <Card
+                      key={employee.id}
+                      className="cursor-pointer hover:shadow-md transition-shadow"
+                      onClick={() => handleEmployeeSelect(employee)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-12 w-12">
+                            <AvatarImage src={employee.avatar || "/placeholder.svg"} alt={employee.name} />
+                            <AvatarFallback>
+                              {employee.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <div className="font-medium text-foreground">{employee.name}</div>
+                            <div className="text-sm text-muted-foreground">{employee.role}</div>
+                            <div className="text-sm text-muted-foreground">{employee.branch}</div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="mt-3 pt-3 border-t border-border">
-                        <div className="text-sm text-muted-foreground">
-                          <div>Salary: ₹{employee.baseSalary.toLocaleString()}</div>
-                          <div>Phone: {employee.phone}</div>
+                        
+                        {/* Today Status Badge with Check-in Time */}
+                        {employee.todayStatus && statusBadge && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${statusBadge.bgColor} ${statusBadge.textColor} ${statusBadge.borderColor} text-xs font-medium`}>
+                              <div className={`w-2 h-2 rounded-full ${
+                                employee.todayStatus.toLowerCase() === 'present' ? 'bg-green-500' :
+                                employee.todayStatus.toLowerCase() === 'absent' ? 'bg-red-500' :
+                                'bg-orange-500'
+                              }`}></div>
+                              {employee.todayStatus}
+                            </div>
+                            
+                            {/* Show check-in time if present */}
+                            {employee.todayStatus.toLowerCase() === 'present' && employee.checkInTime && (
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-300 text-xs font-medium">
+                                <Clock className="h-3 w-3" />
+                                {employee.checkInTime}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className="mt-3 pt-3 border-t border-border">
+                          <div className="text-sm text-muted-foreground mb-3">
+                            <div>Salary: ₹{employee.baseSalary.toLocaleString()}</div>
+                            <div>Phone: {employee.phone}</div>
+                          </div>
+                          
+                          {/* Update Attendance Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={(e) => handleUpdateAttendanceClick(e, employee)}
+                          >
+                            <Clock className="h-4 w-4 mr-2" />
+                            Update Attendance
+                          </Button>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
+                      </CardContent>
+                    </Card>
+                  )
+                })
               )}
             </div>
           </CardContent>
@@ -1150,7 +1265,7 @@ const EnhancedAttendanceSystem = () => {
 
       {/* Edit Attendance Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
@@ -1162,31 +1277,34 @@ const EnhancedAttendanceSystem = () => {
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            {/* Mobile-friendly: Stack on mobile, side-by-side on larger screens */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="editCheckIn">Check In Time</Label>
+                <Label htmlFor="editCheckIn" className="text-sm font-medium">Check In Time</Label>
                 <Input
                   id="editCheckIn"
                   type="time"
                   value={editForm.checkIn}
                   onChange={(e) => setEditForm(prev => ({ ...prev, checkIn: e.target.value }))}
                   placeholder="HH:MM"
+                  className="w-full text-base h-11"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="editCheckOut">Check Out Time</Label>
+                <Label htmlFor="editCheckOut" className="text-sm font-medium">Check Out Time</Label>
                 <Input
                   id="editCheckOut"
                   type="time"
                   value={editForm.checkOut}
                   onChange={(e) => setEditForm(prev => ({ ...prev, checkOut: e.target.value }))}
                   placeholder="HH:MM"
+                  className="w-full text-base h-11"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="breakMinutes">Break Time (Minutes)</Label>
+              <Label htmlFor="breakMinutes" className="text-sm font-medium">Break Time (Minutes)</Label>
               <Input
                 id="breakMinutes"
                 type="number"
@@ -1195,6 +1313,7 @@ const EnhancedAttendanceSystem = () => {
                 value={editForm.breakMinutes}
                 onChange={(e) => setEditForm(prev => ({ ...prev, breakMinutes: parseInt(e.target.value) || 0 }))}
                 placeholder="Enter break duration in minutes"
+                className="w-full text-base h-11"
               />
               <p className="text-xs text-muted-foreground">
                 {editForm.breakMinutes > 0 ? `${(editForm.breakMinutes / 60).toFixed(2)} hours` : 'No break'}
@@ -1202,17 +1321,19 @@ const EnhancedAttendanceSystem = () => {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
               onClick={() => setIsEditDialogOpen(false)}
               disabled={isSavingAttendance}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSaveAttendance}
               disabled={isSavingAttendance}
+              className="w-full sm:w-auto"
             >
               {isSavingAttendance ? (
                 <>
