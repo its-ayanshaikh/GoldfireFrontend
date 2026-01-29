@@ -42,16 +42,24 @@ export default function ProductEdit() {
         console.log('📦 Variants from API:', data.variants)
 
         // Convert API data to form format
-        const formattedVariants = data.variants?.map(v => ({
-          id: `variant_${v.id || Math.random().toString(36).substring(2, 9)}`,
-          subBrandId: v.subbrand?.toString() || "",
-          subBrandName: v.subbrand_name || "",
-          selectedModels: v.models?.map(m => m.id) || [],
-          selectedModelNames: v.models?.map(m => m.name) || [],
-          sellingPrice: v.selling_price?.toString() || "",
-          minSellingPrice: v.minimum_selling_price?.toString() || "",
-          minQtyAlert: v.minimum_quantity?.toString() || "5"
-        })) || []
+        const formattedVariants = data.variants?.map(v => {
+          console.log('📦 Processing variant:', v)
+          console.log('📦 Variant subbrand:', v.subbrand, typeof v.subbrand)
+          
+          // Handle subbrand - it might be an ID (number) or object
+          const subBrandId = typeof v.subbrand === 'object' ? v.subbrand?.id : v.subbrand
+          
+          return {
+            id: `variant_${v.id || Math.random().toString(36).substring(2, 9)}`,
+            subBrandId: subBrandId?.toString() || "",
+            subBrandName: v.subbrand_name || "",
+            selectedModels: v.models?.map(m => m.id) || [],
+            selectedModelNames: v.models?.map(m => m.name) || [],
+            sellingPrice: v.selling_price?.toString() || "",
+            minSellingPrice: v.minimum_selling_price?.toString() || "",
+            minQtyAlert: v.minimum_quantity?.toString() || "5"
+          }
+        }) || []
 
         // If subcategory is not available but we have variants with subbrand, fetch subbrand to get subcategory
         let subcategoryId = data.subcategory
@@ -67,14 +75,27 @@ export default function ProductEdit() {
             if (subBrandResponse.ok) {
               const subBrandData = await subBrandResponse.json()
               console.log('📦 SubBrand data:', subBrandData)
-              // Assuming subbrand response has subcategory field
-              if (subBrandData.subcategory) {
-                subcategoryId = subBrandData.subcategory
+              
+              // Response might be array or single object
+              const subBrand = Array.isArray(subBrandData) ? subBrandData[0] : subBrandData
+              
+              if (subBrand?.subcategory) {
+                subcategoryId = subBrand.subcategory
                 console.log('✅ Extracted subcategoryId from subbrand:', subcategoryId)
               }
             }
           } catch (err) {
             console.error('Error fetching subbrand for subcategory:', err)
+          }
+        }
+        
+        // If still no subcategoryId, try to get from variant's subbrand data directly
+        if (!subcategoryId && data.variants && data.variants.length > 0) {
+          // Backend might include subcategory in variant's subbrand object
+          const firstVariant = data.variants[0]
+          if (typeof firstVariant.subbrand === 'object' && firstVariant.subbrand?.subcategory) {
+            subcategoryId = firstVariant.subbrand.subcategory
+            console.log('✅ Extracted subcategoryId from variant subbrand object:', subcategoryId)
           }
         }
 
@@ -102,6 +123,8 @@ export default function ProductEdit() {
           variants: formattedVariants
         }
 
+        console.log('✅ Final initialData:', initialData)
+        console.log('✅ subcategoryId set to:', subcategoryId)
         setProduct(initialData)
       } catch (err) {
         console.error('Error fetching product:', err)

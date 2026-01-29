@@ -51,9 +51,9 @@ export default function ProductForm({
         : null
     const hasVariants = categoryName ? VARIANT_CATEGORIES.includes(categoryName) : false
 
-    // Fetch HSN & Commission data when category changes (only in create mode)
+    // Fetch HSN & Commission data when category changes (in both create and edit mode)
     useEffect(() => {
-        if (!editMode && productData.selectedCategory !== null && categoriesData && categoriesData.length > 0) {
+        if (productData.selectedCategory !== null && categoriesData && categoriesData.length > 0) {
             // Get actual category ID from categoriesData using selectedCategory as index
             const categoryData = categoriesData[productData.selectedCategory]
             if (categoryData?.id) {
@@ -86,6 +86,20 @@ export default function ProductForm({
             fetchSubBrands(productData.selectedSubcategoryId)
         }
     }, [hasVariants, productData.selectedSubcategoryId, editMode, productData.variants?.length])
+
+    // Fetch models for variants in edit mode after subbrands are loaded
+    useEffect(() => {
+        if (editMode && subBrands.length > 0 && productData.variants && productData.variants.length > 0) {
+            console.log('🔥 Edit mode - Fetching models for variant subbrands')
+            // Fetch models for each variant's subbrand
+            productData.variants.forEach(variant => {
+                if (variant.subBrandId) {
+                    console.log('📦 Fetching models for variant subbrand:', variant.subBrandId)
+                    fetchModels(variant.subBrandId)
+                }
+            })
+        }
+    }, [editMode, subBrands.length, productData.variants?.length])
 
     const fetchHsnCommissionData = async (categoryIndex) => {
         try {
@@ -230,13 +244,35 @@ export default function ProductForm({
 
     // Get available sub-brands - SubBrand available until ALL its models are selected across variants
     const getAvailableSubBrands = useCallback((currentVariantId) => {
-        return subBrands.filter(sb => {
+        console.log('🔍 getAvailableSubBrands called:', {
+            currentVariantId,
+            subBrandsLength: subBrands.length,
+            subBrands: subBrands,
+            variants: productData.variants
+        })
+        
+        // Get current variant's selected subbrand
+        const currentVariant = (productData.variants || []).find(v => v.id === currentVariantId)
+        const currentSubBrandId = currentVariant?.subBrandId ? parseInt(currentVariant.subBrandId) : null
+        
+        console.log('📦 Current variant subbrand:', currentSubBrandId)
+        
+        const availableSubBrands = subBrands.filter(sb => {
+            // Always include the currently selected subbrand for this variant
+            if (currentSubBrandId && sb.id === currentSubBrandId) {
+                console.log('✅ Including current subbrand:', sb.name)
+                return true
+            }
+            
             // Get all variants that have this sub-brand selected (except current one)
             const variantsWithThisSubBrand = (productData.variants || [])
                 .filter(v => v.id !== currentVariantId && parseInt(v.subBrandId) === sb.id)
             
             // If no other variant has this sub-brand, it's available
-            if (variantsWithThisSubBrand.length === 0) return true
+            if (variantsWithThisSubBrand.length === 0) {
+                console.log('✅ No other variant has subbrand:', sb.name)
+                return true
+            }
             
             // Get all selected model IDs for this sub-brand across all variants
             const allSelectedModelIds = variantsWithThisSubBrand
@@ -247,13 +283,20 @@ export default function ProductForm({
             const subBrandModels = models.filter(m => m.subbrand === sb.id)
             
             // If we don't have models loaded for this subbrand, keep it available
-            if (subBrandModels.length === 0) return true
+            if (subBrandModels.length === 0) {
+                console.log('✅ No models loaded for subbrand:', sb.name)
+                return true
+            }
             
             // Check if all models are selected
             const allModelsSelected = subBrandModels.every(m => allSelectedModelIds.includes(m.id))
             
+            console.log('🔍 Subbrand check:', sb.name, 'allModelsSelected:', allModelsSelected)
             return !allModelsSelected
         })
+        
+        console.log('✅ Available subbrands:', availableSubBrands)
+        return availableSubBrands
     }, [productData.variants, subBrands, models])
 
     // Get remaining models for a sub-brand (exclude models already selected in other variants with same sub-brand)
@@ -790,14 +833,20 @@ export default function ProductForm({
                                                     <div className="flex items-center gap-1">
                                                         <select
                                                             className="flex-1 rounded border border-border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-                                                            value={variant.subBrandId}
+                                                            value={variant.subBrandId || ""}
                                                             onChange={(e) => updateVariant(variant.id, 'subBrandId', e.target.value)}
                                                             disabled={subBrandsLoading}
                                                         >
-                                                            <option value="">Select</option>
-                                                            {getAvailableSubBrands(variant.id).map((sb) => (
-                                                                <option key={sb.id} value={sb.id}>{sb.name}</option>
-                                                            ))}
+                                                            <option value="">Select Sub Brand</option>
+                                                            {subBrandsLoading ? (
+                                                                <option disabled>Loading...</option>
+                                                            ) : subBrands.length === 0 ? (
+                                                                <option disabled>No sub brands available</option>
+                                                            ) : (
+                                                                getAvailableSubBrands(variant.id).map((sb) => (
+                                                                    <option key={sb.id} value={sb.id}>{sb.name}</option>
+                                                                ))
+                                                            )}
                                                         </select>
                                                         <Button
                                                             type="button"
