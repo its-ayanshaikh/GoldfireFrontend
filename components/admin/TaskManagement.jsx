@@ -420,7 +420,6 @@ const TaskManagement = () => {
         task_name: taskForm.name,
         description: taskForm.description,
         assigned_to: assignedToNumbers,
-        assigned_by: userId,
         task_frequency: {
           days: frequencyDays,
         },
