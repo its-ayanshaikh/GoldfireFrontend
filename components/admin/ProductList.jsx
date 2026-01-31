@@ -406,9 +406,20 @@ export default function ProductList() {
                   </tr>
                 ) : (
                   filtered.map((p) => {
-                    const qty = selectedBranch === "all"
-                      ? totalQty(p)
-                      : p.quantities?.find(q => q.branch_name === selectedBranch)?.qty || 0
+                    // Calculate quantity based on new API structure
+                    let qty = 0
+                    
+                    if (selectedBranch === "all") {
+                      // Show total quantity
+                      qty = p.total_qty || 0
+                    } else {
+                      // Show branch-specific quantity
+                      if (p.branch_qty && Array.isArray(p.branch_qty)) {
+                        const branchData = p.branch_qty.find(b => b.branch_name === selectedBranch)
+                        qty = branchData?.qty || 0
+                      }
+                    }
+                    
                     const low = qty <= (p.min_qty_alert ?? 0)
 
                     return (
@@ -601,15 +612,18 @@ export default function ProductList() {
                 .filter(variant => {
                   if (!variantSearch.trim()) return true
                   const search = variantSearch.toLowerCase()
-                  const subBrandMatch = (variant.subbrand_name || "").toLowerCase().includes(search)
-                  const modelMatch = variant.models && Array.isArray(variant.models) && 
-                    variant.models.some(m => (m.name || "").toLowerCase().includes(search))
+                  // Handle both subbrand and subbrand_name
+                  const subBrandMatch = (variant.subbrand_name || variant.subbrand || "").toLowerCase().includes(search)
+                  // Handle both models array and single model string
+                  const modelMatch = variant.models && Array.isArray(variant.models) 
+                    ? variant.models.some(m => (m.name || m || "").toLowerCase().includes(search))
+                    : (variant.model || "").toLowerCase().includes(search)
                   return subBrandMatch || modelMatch
                 })
                 .map((variant, variantIdx) => (
                   <div key={variantIdx} className="space-y-3 p-4 rounded border border-border bg-card">
                     <div className="font-semibold text-foreground bg-primary/10 px-3 py-1.5 rounded w-fit">
-                      {variant.subbrand_name || "Sub Brand"}
+                      {variant.subbrand_name || variant.subbrand || "Sub Brand"}
                     </div>
                     
                     {/* Models List */}
@@ -618,26 +632,53 @@ export default function ProductList() {
                       <div className="font-medium text-foreground">
                         {variant.models && Array.isArray(variant.models) && variant.models.length > 0 
                           ? variant.models.map(m => m.name || m).join(", ")
-                          : "No models"
+                          : variant.model || "No models"
                         }
                       </div>
                     </div>
 
-                    {/* Pricing Info */}
-                    <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border">
-                      <div>
-                        <div className="text-xs text-muted-foreground">Selling Price</div>
-                        <div className="font-medium text-foreground">₹{variant.selling_price || "-"}</div>
+                    {/* Pricing Info - Only show if available */}
+                    {(variant.selling_price || variant.minimum_selling_price || variant.minimum_quantity) && (
+                      <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border">
+                        {variant.selling_price && (
+                          <div>
+                            <div className="text-xs text-muted-foreground">Selling Price</div>
+                            <div className="font-medium text-foreground">₹{variant.selling_price}</div>
+                          </div>
+                        )}
+                        {variant.minimum_selling_price && (
+                          <div>
+                            <div className="text-xs text-muted-foreground">Min Price</div>
+                            <div className="font-medium text-foreground">₹{variant.minimum_selling_price}</div>
+                          </div>
+                        )}
+                        {variant.minimum_quantity && (
+                          <div>
+                            <div className="text-xs text-muted-foreground">Min Qty</div>
+                            <div className="font-medium text-foreground">{variant.minimum_quantity}</div>
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Min Price</div>
-                        <div className="font-medium text-foreground">₹{variant.minimum_selling_price || "-"}</div>
+                    )}
+
+                    {/* Branch-wise Quantity */}
+                    {variant.branch_qty && variant.branch_qty.length > 0 && (
+                      <div className="pt-2 border-t border-border">
+                        <div className="text-xs text-muted-foreground mb-2">Branch-wise Stock:</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {variant.branch_qty.map((branchQty, idx) => (
+                            <div key={idx} className="flex justify-between items-center bg-muted/30 px-2 py-1 rounded text-sm">
+                              <span className="text-muted-foreground">{branchQty.branch_name}:</span>
+                              <span className="font-semibold text-foreground">{branchQty.qty}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-2 flex justify-between items-center bg-primary/10 px-2 py-1 rounded text-sm font-semibold">
+                          <span className="text-foreground">Total:</span>
+                          <span className="text-foreground">{variant.total_qty || 0}</span>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Min Qty</div>
-                        <div className="font-medium text-foreground">{variant.minimum_quantity || "-"}</div>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 ))
               }
@@ -706,6 +747,28 @@ export default function ProductList() {
                   </Badge>
                 </div>
               </div>
+
+              {/* Branch-wise Quantity */}
+              {selectedProduct.branch_qty && selectedProduct.branch_qty.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-3">Branch-wise Stock:</div>
+                    <div className="space-y-2">
+                      {selectedProduct.branch_qty.map((branchQty, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-muted/30 px-3 py-2 rounded">
+                          <span className="text-foreground">{branchQty.branch_name}</span>
+                          <span className="font-semibold text-foreground">{branchQty.qty}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between items-center bg-primary/10 px-3 py-2 rounded font-semibold">
+                        <span className="text-foreground">Total Stock</span>
+                        <span className="text-foreground">{selectedProduct.total_qty || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </DialogContent>
