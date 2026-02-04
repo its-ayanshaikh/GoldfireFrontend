@@ -41,7 +41,7 @@ const TaskCard = ({ task, onUpdateStatus }) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: "user", 
+          facingMode: { ideal: "environment" },
           width: { ideal: 640 },
           height: { ideal: 480 },
         },
