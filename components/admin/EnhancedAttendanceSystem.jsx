@@ -774,6 +774,38 @@ const EnhancedAttendanceSystem = () => {
                             <div className="font-medium text-foreground">{employee.name}</div>
                             <div className="text-sm text-muted-foreground">{employee.branch}</div>
                           </div>
+                          
+                          {/* Check-in/Check-out Image Thumbnails */}
+                          <div className="flex gap-2 flex-shrink-0">
+                            {employee.checkInImage && (
+                              <div className="relative group">
+                                <div className="text-xs text-muted-foreground text-center mb-1">In</div>
+                                <img
+                                  src={`${baseUrl}${employee.checkInImage}`}
+                                  alt="Check-in"
+                                  className="w-12 h-12 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    window.open(`${baseUrl}${employee.checkInImage}`, '_blank')
+                                  }}
+                                />
+                              </div>
+                            )}
+                            {employee.checkOutImage && (
+                              <div className="relative group">
+                                <div className="text-xs text-muted-foreground text-center mb-1">Out</div>
+                                <img
+                                  src={`${baseUrl}${employee.checkOutImage}`}
+                                  alt="Check-out"
+                                  className="w-12 h-12 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    window.open(`${baseUrl}${employee.checkOutImage}`, '_blank')
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                         
                         {/* Today Status Badge with Check-in Time */}
@@ -799,41 +831,6 @@ const EnhancedAttendanceSystem = () => {
                         )}
                         
                         {/* Check-in/Check-out Images */}
-                        {(employee.checkInImage || employee.checkOutImage) && (
-                          <div className="mt-3 pt-3 border-t border-border">
-                            <div className="text-xs text-muted-foreground mb-2">Today's Images:</div>
-                            <div className="flex gap-2">
-                              {employee.checkInImage && (
-                                <div className="flex-1">
-                                  <div className="text-xs text-muted-foreground mb-1">Check-in</div>
-                                  <img
-                                    src={`${baseUrl}${employee.checkInImage}`}
-                                    alt="Check-in"
-                                    className="w-full h-20 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      window.open(`${baseUrl}${employee.checkInImage}`, '_blank')
-                                    }}
-                                  />
-                                </div>
-                              )}
-                              {employee.checkOutImage && (
-                                <div className="flex-1">
-                                  <div className="text-xs text-muted-foreground mb-1">Check-out</div>
-                                  <img
-                                    src={`${baseUrl}${employee.checkOutImage}`}
-                                    alt="Check-out"
-                                    className="w-full h-20 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      window.open(`${baseUrl}${employee.checkOutImage}`, '_blank')
-                                    }}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
                         
                         <div className="mt-3 pt-3 border-t border-border flex gap-2">
                           {/* View Attendance Button */}
