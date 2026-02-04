@@ -8,7 +8,7 @@ import { Label } from "../ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { Badge } from "../ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar"
-import { Clock, Search, Filter, ArrowLeft, Calendar, CheckCircle, XCircle, AlertCircle, Plus, Coffee, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { Clock, Search, Filter, ArrowLeft, Calendar, CheckCircle, XCircle, AlertCircle, Plus, Coffee, ChevronLeft, ChevronRight, Loader2, Eye } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog"
 import { Textarea } from "../ui/textarea"
 import { useToast } from "../../hooks/use-toast"
@@ -143,7 +143,9 @@ const EnhancedAttendanceSystem = () => {
           joiningDate: employee.joining_date,
           status: employee.status,
           todayStatus: employee.today_status || null, // Add today_status from API
-          checkInTime: employee.check_in_time || null // Add check_in_time from API
+          checkInTime: employee.check_in_time || null, // Add check_in_time from API
+          checkInImage: employee.check_in_image || null, // Add check_in_image from API
+          checkOutImage: employee.check_out_image || null // Add check_out_image from API
         }))
 
         setEmployees(transformedData)
@@ -717,10 +719,10 @@ const EnhancedAttendanceSystem = () => {
         <Card>
           <CardHeader>
             <CardTitle>Employee List</CardTitle>
-            <CardDescription>Click on an employee to view their attendance details</CardDescription>
+            <CardDescription>Click on View button to see attendance details</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {loading ? (
                 <div className="col-span-full flex items-center justify-center py-8">
                   <div className="text-center">
@@ -750,16 +752,16 @@ const EnhancedAttendanceSystem = () => {
               ) : (
                 filteredEmployees.map((employee) => {
                   const statusBadge = getTodayStatusBadge(employee.todayStatus)
+                  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
                   
                   return (
                     <Card
                       key={employee.id}
-                      className="cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => handleEmployeeSelect(employee)}
+                      className="hover:shadow-md transition-shadow"
                     >
                       <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-12 w-12">
+                        <div className="flex items-start gap-3">
+                          <Avatar className="h-12 w-12 flex-shrink-0">
                             <AvatarImage src={employee.avatar || "/placeholder.svg"} alt={employee.name} />
                             <AvatarFallback>
                               {employee.name
@@ -768,9 +770,8 @@ const EnhancedAttendanceSystem = () => {
                                 .join("")}
                             </AvatarFallback>
                           </Avatar>
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             <div className="font-medium text-foreground">{employee.name}</div>
-                            <div className="text-sm text-muted-foreground">{employee.role}</div>
                             <div className="text-sm text-muted-foreground">{employee.branch}</div>
                           </div>
                         </div>
@@ -797,17 +798,60 @@ const EnhancedAttendanceSystem = () => {
                           </div>
                         )}
                         
-                        <div className="mt-3 pt-3 border-t border-border">
-                          <div className="text-sm text-muted-foreground mb-3">
-                            <div>Salary: ₹{employee.baseSalary.toLocaleString()}</div>
-                            <div>Phone: {employee.phone}</div>
+                        {/* Check-in/Check-out Images */}
+                        {(employee.checkInImage || employee.checkOutImage) && (
+                          <div className="mt-3 pt-3 border-t border-border">
+                            <div className="text-xs text-muted-foreground mb-2">Today's Images:</div>
+                            <div className="flex gap-2">
+                              {employee.checkInImage && (
+                                <div className="flex-1">
+                                  <div className="text-xs text-muted-foreground mb-1">Check-in</div>
+                                  <img
+                                    src={`${baseUrl}${employee.checkInImage}`}
+                                    alt="Check-in"
+                                    className="w-full h-20 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      window.open(`${baseUrl}${employee.checkInImage}`, '_blank')
+                                    }}
+                                  />
+                                </div>
+                              )}
+                              {employee.checkOutImage && (
+                                <div className="flex-1">
+                                  <div className="text-xs text-muted-foreground mb-1">Check-out</div>
+                                  <img
+                                    src={`${baseUrl}${employee.checkOutImage}`}
+                                    alt="Check-out"
+                                    className="w-full h-20 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      window.open(`${baseUrl}${employee.checkOutImage}`, '_blank')
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </div>
+                        )}
+                        
+                        <div className="mt-3 pt-3 border-t border-border flex gap-2">
+                          {/* View Attendance Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleEmployeeSelect(employee)}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
+                          </Button>
                           
                           {/* Update Attendance Button */}
                           <Button
                             variant="outline"
                             size="sm"
-                            className="w-full"
+                            className="flex-1"
                             onClick={(e) => handleUpdateAttendanceClick(e, employee)}
                           >
                             <Clock className="h-4 w-4 mr-2" />
