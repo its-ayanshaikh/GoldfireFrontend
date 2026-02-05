@@ -94,8 +94,15 @@ export default function ProductForm({
             // Fetch models for each variant's subbrand
             productData.variants.forEach(variant => {
                 if (variant.subBrandId) {
-                    console.log('📦 Fetching models for variant subbrand:', variant.subBrandId)
-                    fetchModels(variant.subBrandId)
+                    console.log('📦 Fetching models for variant subbrand:', variant.subBrandId, typeof variant.subBrandId)
+                    
+                    // CRITICAL: Ensure we're passing ID, not name
+                    const subBrandIdNum = parseInt(variant.subBrandId)
+                    if (!isNaN(subBrandIdNum)) {
+                        fetchModels(subBrandIdNum)
+                    } else {
+                        console.error('❌ Invalid subBrandId:', variant.subBrandId)
+                    }
                 }
             })
         }
@@ -155,9 +162,17 @@ export default function ProductForm({
             const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
             const token = localStorage.getItem('access_token')
             
-            console.log('🔥 Fetching sub-brands for subcategory:', subcategoryId)
+            // CRITICAL: Ensure subcategoryId is numeric
+            const subcategoryIdNum = parseInt(subcategoryId)
+            if (isNaN(subcategoryIdNum)) {
+                console.error('❌ Invalid subcategoryId:', subcategoryId)
+                setSubBrands([])
+                return
+            }
             
-            const response = await fetch(`${baseUrl}/api/product/subbrands/${subcategoryId}/`, {
+            console.log('🔥 Fetching sub-brands for subcategory:', subcategoryIdNum)
+            
+            const response = await fetch(`${baseUrl}/api/product/subbrands/${subcategoryIdNum}/`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -191,9 +206,17 @@ export default function ProductForm({
             const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
             const token = localStorage.getItem('access_token')
             
-            console.log('🔥 Fetching models for sub-brand:', subBrandId)
+            // CRITICAL: Ensure subBrandId is numeric
+            const subBrandIdNum = parseInt(subBrandId)
+            if (isNaN(subBrandIdNum)) {
+                console.error('❌ Invalid subBrandId:', subBrandId)
+                setModels([])
+                return
+            }
             
-            const response = await fetch(`${baseUrl}/api/product/models/${subBrandId}/`, {
+            console.log('🔥 Fetching models for sub-brand ID:', subBrandIdNum)
+            
+            const response = await fetch(`${baseUrl}/api/product/models/${subBrandIdNum}/`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -334,14 +357,23 @@ export default function ProductForm({
                 const updated = { ...v, [field]: value }
                 
                 if (field === 'subBrandId') {
-                    const subBrand = subBrands.find(sb => sb.id === parseInt(value))
+                    console.log('📦 Updating variant subBrandId:', value, typeof value)
+                    
+                    // CRITICAL: Ensure value is numeric ID
+                    const subBrandIdNum = parseInt(value)
+                    if (isNaN(subBrandIdNum)) {
+                        console.error('❌ Invalid subBrandId value:', value)
+                        return v // Don't update if invalid
+                    }
+                    
+                    const subBrand = subBrands.find(sb => sb.id === subBrandIdNum)
                     updated.subBrandName = subBrand?.name || ""
                     // Clear selected models when sub-brand changes
                     updated.selectedModels = []
                     updated.selectedModelNames = []
                     // Fetch models for new sub-brand
                     if (value) {
-                        fetchModels(value)
+                        fetchModels(subBrandIdNum)
                     }
                 }
                 
@@ -482,10 +514,19 @@ export default function ProductForm({
     const openModelDropdown = (variantId) => {
         const variant = (productData.variants || []).find(v => v.id === variantId)
         if (variant?.subBrandId) {
-            setSelectedSubBrandForModel(variant.subBrandId)
-            fetchModels(variant.subBrandId)
-            setActiveModelDropdown(variantId)
-            setModelSearchTerm("") // Reset search when opening
+            console.log('📦 Opening model dropdown for variant:', variantId, 'subBrandId:', variant.subBrandId, typeof variant.subBrandId)
+            
+            // CRITICAL: Ensure we're passing ID, not name
+            const subBrandIdNum = parseInt(variant.subBrandId)
+            if (!isNaN(subBrandIdNum)) {
+                setSelectedSubBrandForModel(subBrandIdNum)
+                fetchModels(subBrandIdNum)
+                setActiveModelDropdown(variantId)
+                setModelSearchTerm("") // Reset search when opening
+            } else {
+                console.error('❌ Invalid subBrandId:', variant.subBrandId)
+                toast({ title: "Error", description: "Invalid sub-brand ID", variant: "destructive" })
+            }
         } else {
             toast({ title: "Select Sub Brand", description: "Please select a sub-brand first", variant: "destructive" })
         }
