@@ -45,43 +45,50 @@ export default function ProductEdit() {
         const formattedVariants = data.variants?.map(v => {
           console.log('📦 Processing variant:', v)
           console.log('📦 Variant subbrand_id:', v.subbrand_id, 'subbrand:', v.subbrand)
-          console.log('📦 Variant model_id:', v.model_id, 'model:', v.model)
+          console.log('📦 Variant models:', v.models)
           console.log('📦 Variant subcategory_id:', v.subcategory_id)
           
-          // CRITICAL: Use the new API response format with _id fields
-          // Backend now returns: subbrand_id, model_id, subcategory_id (numeric IDs)
+          // CRITICAL: Use the new API response format
+          // Backend returns: subbrand_id (numeric), models (array of {id, name}), subcategory_id (numeric)
           const subBrandId = v.subbrand_id || v.subbrand_id === 0 ? v.subbrand_id : null
-          const modelId = v.model_id || v.model_id === 0 ? v.model_id : null
           const subcategoryId = v.subcategory_id || v.subcategory_id === 0 ? v.subcategory_id : null
           
+          // Extract model IDs and names from models array
+          const modelIds = v.models?.map(m => m.id) || []
+          const modelNames = v.models?.map(m => m.name) || []
+          
           console.log('✅ Extracted subBrandId:', subBrandId)
-          console.log('✅ Extracted modelId:', modelId)
           console.log('✅ Extracted subcategoryId:', subcategoryId)
+          console.log('✅ Extracted modelIds:', modelIds)
+          console.log('✅ Extracted modelNames:', modelNames)
           
           return {
-            id: `variant_${v.variant_id || v.id || Math.random().toString(36).substring(2, 9)}`,
+            id: `variant_${v.variant_id || Math.random().toString(36).substring(2, 9)}`,
             subBrandId: subBrandId?.toString() || "",
             subBrandName: v.subbrand || "",
             subcategoryId: subcategoryId?.toString() || "",
-            selectedModels: modelId ? [modelId] : [],
-            selectedModelNames: v.model ? [v.model] : [],
+            subcategoryName: v.subcategory_name || "",
+            selectedModels: modelIds,
+            selectedModelNames: modelNames,
             sellingPrice: v.selling_price?.toString() || "",
             minSellingPrice: v.minimum_selling_price?.toString() || "",
-            minQtyAlert: v.minimum_quantity?.toString() || "5"
+            minQtyAlert: v.minimum_quantity?.toString() || "3"
           }
         }) || []
 
-        // Get subcategory ID - priority order:
+        // Get subcategory ID and name - priority order:
         // 1. From main product data (data.subcategory)
         // 2. From first variant's subcategory_id (new backend format)
         // 3. Fallback: fetch from subbrand API
         let subcategoryId = data.subcategory
+        let subcategoryName = data.subcategory_name
         
         if (!subcategoryId && formattedVariants.length > 0) {
           // Try getting from variant's subcategory_id (new backend format)
           if (formattedVariants[0].subcategoryId) {
             subcategoryId = parseInt(formattedVariants[0].subcategoryId)
-            console.log('✅ Using subcategoryId from variant:', subcategoryId)
+            subcategoryName = formattedVariants[0].subcategoryName || subcategoryName
+            console.log('✅ Using subcategoryId from variant:', subcategoryId, subcategoryName)
           }
           // Fallback: fetch from subbrand API
           else if (formattedVariants[0].subBrandId) {
@@ -110,32 +117,22 @@ export default function ProductEdit() {
             }
           }
         }
-        
-        // If still no subcategoryId, try to get from variant's subbrand data directly
-        if (!subcategoryId && data.variants && data.variants.length > 0) {
-          // Backend might include subcategory in variant's subbrand object
-          const firstVariant = data.variants[0]
-          if (typeof firstVariant.subbrand === 'object' && firstVariant.subbrand?.subcategory) {
-            subcategoryId = firstVariant.subbrand.subcategory
-            console.log('✅ Extracted subcategoryId from variant subbrand object:', subcategoryId)
-          }
-        }
 
         const initialData = {
           id: data.id,
           category: data.category_name,
           categoryId: data.category,
-          subcategory: data.subcategory_name,
+          subcategory: subcategoryName,
           subcategoryId: subcategoryId,
           gender: data.gender,
           brand: data.brand_name,
           brandId: data.brand,
           form: {
             name: data.name || "",
-            hsn: data.hsn_code || "",
+            hsn: data.hsn || data.hsn_code || "",
             sellingPrice: data.selling_price?.toString() || "",
             minSellingPrice: data.minimum_selling_price?.toString() || "",
-            minQtyAlert: data.minimum_quantity?.toString() || "",
+            minQtyAlert: data.minimum_quantity?.toString() || "1",
             commissionType: data.commission_type === "percentage" ? "percent" : "fixed",
             commissionValue: data.commission_value?.toString() || "",
           },
