@@ -114,6 +114,9 @@ const EmployeeList = () => {
             overtimeMultiplier: employee.overtime_multiplier,
             emergencyContact: employee.emergency_contact,
             address: employee.address,
+            shiftIn: employee.shift_in,
+            shiftOut: employee.shift_out,
+            status: employee.status,
             avatar: "/placeholder-user.jpg"
           }))
 
@@ -267,10 +270,13 @@ const EmployeeList = () => {
       branch_id: employee.branchId,
       role_id: employee.roleId,
       base_salary: employee.baseSalary,
+      shift_in: employee.shiftIn,
+      shift_out: employee.shiftOut,
       working_hours: employee.workingHours,
       overtime_multiplier: employee.overtimeMultiplier,
       joining_date: employee.joiningDate,
-      emergency_contact: employee.emergencyContact
+      emergency_contact: employee.emergencyContact,
+      status: employee.status
     })
     setShowAddForm(true)
   }

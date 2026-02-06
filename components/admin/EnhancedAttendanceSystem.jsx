@@ -8,7 +8,7 @@ import { Label } from "../ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { Badge } from "../ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar"
-import { Clock, Search, Filter, ArrowLeft, Calendar, CheckCircle, XCircle, AlertCircle, Plus, Coffee, ChevronLeft, ChevronRight, Loader2, Eye } from "lucide-react"
+import { Clock, Search, Filter, ArrowLeft, Calendar, CheckCircle, XCircle, AlertCircle, Plus, Coffee, ChevronLeft, ChevronRight, Loader2, Eye, X } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog"
 import { Textarea } from "../ui/textarea"
 import { useToast } from "../../hooks/use-toast"
@@ -46,6 +46,16 @@ const EnhancedAttendanceSystem = () => {
   })
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isSavingAttendance, setIsSavingAttendance] = useState(false)
+
+  // Image modal state
+  const [selectedImage, setSelectedImage] = useState(null)
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false)
+
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log('State changed - isImageModalOpen:', isImageModalOpen)
+    console.log('State changed - selectedImage:', selectedImage)
+  }, [isImageModalOpen, selectedImage])
 
   useEffect(() => {
     setIsClient(true)
@@ -601,6 +611,23 @@ const EnhancedAttendanceSystem = () => {
   }
 
   // Handle update attendance button click
+  // Handle image click to open modal
+  const handleImageClick = (e, imageUrl) => {
+    e.stopPropagation() // Prevent card click
+    console.log('Image clicked:', imageUrl)
+    console.log('Before state update - isImageModalOpen:', isImageModalOpen)
+    console.log('Before state update - selectedImage:', selectedImage)
+    setSelectedImage(imageUrl)
+    setIsImageModalOpen(true)
+    console.log('Modal should open now')
+    
+    // Check state after a small delay
+    setTimeout(() => {
+      console.log('After state update - isImageModalOpen should be true')
+    }, 100)
+  }
+
+  // Handle update attendance button click
   const handleUpdateAttendanceClick = async (e, employee) => {
     e.stopPropagation() // Prevent card click
     
@@ -784,10 +811,7 @@ const EnhancedAttendanceSystem = () => {
                                   src={`${baseUrl}${employee.checkInImage}`}
                                   alt="Check-in"
                                   className="w-12 h-12 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    window.open(`${baseUrl}${employee.checkInImage}`, '_blank')
-                                  }}
+                                  onClick={(e) => handleImageClick(e, `${baseUrl}${employee.checkInImage}`)}
                                 />
                               </div>
                             )}
@@ -798,10 +822,7 @@ const EnhancedAttendanceSystem = () => {
                                   src={`${baseUrl}${employee.checkOutImage}`}
                                   alt="Check-out"
                                   className="w-12 h-12 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    window.open(`${baseUrl}${employee.checkOutImage}`, '_blank')
-                                  }}
+                                  onClick={(e) => handleImageClick(e, `${baseUrl}${employee.checkOutImage}`)}
                                 />
                               </div>
                             )}
@@ -832,15 +853,15 @@ const EnhancedAttendanceSystem = () => {
                         
                         {/* Check-in/Check-out Images */}
                         
-                        <div className="mt-3 pt-3 border-t border-border flex gap-2">
+                        <div className="mt-3 pt-3 border-t border-border flex flex-col sm:flex-row gap-2">
                           {/* View Attendance Button */}
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1"
+                            className="flex-1 text-xs sm:text-sm"
                             onClick={() => handleEmployeeSelect(employee)}
                           >
-                            <Eye className="h-4 w-4 mr-2" />
+                            <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                             View
                           </Button>
                           
@@ -848,11 +869,12 @@ const EnhancedAttendanceSystem = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1"
+                            className="flex-1 text-xs sm:text-sm"
                             onClick={(e) => handleUpdateAttendanceClick(e, employee)}
                           >
-                            <Clock className="h-4 w-4 mr-2" />
-                            Update Attendance
+                            <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                            <span className="hidden sm:inline">Update Attendance</span>
+                            <span className="sm:hidden">Update</span>
                           </Button>
                         </div>
                       </CardContent>
@@ -898,10 +920,11 @@ const EnhancedAttendanceSystem = () => {
   const totalOvertimeHours = isClient ? monthlyAttendance.reduce((sum, day) => sum + (day.overtimeHours || 0), 0) : 0
 
   return (
-    <div className="p-6">
-      {!selectedEmployee ? (
-        // Employee List View
-        <>
+    <>
+      <div className="p-6">
+        {!selectedEmployee ? (
+          // Employee List View
+          <>
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -1486,7 +1509,32 @@ const EnhancedAttendanceSystem = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+
+      </div>
+
+      {/* Image Modal - Simple and Clean */}
+      {isImageModalOpen && selectedImage && (
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90"
+          style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh' }}
+          onClick={() => setIsImageModalOpen(false)}
+        >
+          <button
+            onClick={() => setIsImageModalOpen(false)}
+            className="absolute top-4 right-4 p-3 rounded-full bg-white text-black hover:bg-gray-200"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          
+          <img
+            src={selectedImage}
+            alt="Attendance"
+            className="max-w-[90vw] max-h-[90vh] object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>
   )
 }
 
