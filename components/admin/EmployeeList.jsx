@@ -61,96 +61,107 @@ const EmployeeList = () => {
     }
   }, [searchTerm])
 
+  // Helper function to convert HH:MM:SS to HH:MM
+  const formatTime = (timeString) => {
+    if (!timeString) return timeString
+    // If time is in HH:MM:SS format, convert to HH:MM
+    const parts = timeString.split(':')
+    if (parts.length === 3) {
+      return `${parts[0]}:${parts[1]}`
+    }
+    return timeString
+  }
+
   // Fetch employees from API
-  useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        setIsLoading(true)
-        const token = localStorage.getItem("access_token")
+  const fetchEmployees = async () => {
+    try {
+      setIsLoading(true)
+      const token = localStorage.getItem("access_token")
 
-        // Build query parameters
-        const params = new URLSearchParams()
-        params.append("page", currentPage)
+      // Build query parameters
+      const params = new URLSearchParams()
+      params.append("page", currentPage)
 
-        if (debouncedSearchTerm) {
-          params.append("search", debouncedSearchTerm)
+      if (debouncedSearchTerm) {
+        params.append("search", debouncedSearchTerm)
+      }
+
+      if (filterBranch !== "all") {
+        params.append("branch_id", filterBranch)
+      }
+
+      if (filterRole !== "all") {
+        params.append("role_id", filterRole)
+      }
+
+      console.log('Fetching with params:', params.toString())
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/employee/?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        credentials: 'omit',
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Employees fetched:', data)
+
+        // Map API data to component format
+        const mappedEmployees = (data.results || data).map(employee => ({
+          id: employee.id,
+          name: employee.name,
+          email: employee.email,
+          phone: employee.phone,
+          role: employee.role?.name || "Unknown Role",
+          roleId: employee.role?.id,
+          branch: employee.branch?.name || "Unknown Branch",
+          branchId: employee.branch?.id,
+          baseSalary: parseFloat(employee.base_salary || 0),
+          joiningDate: employee.joining_date,
+          workingHours: employee.working_hours,
+          overtimeMultiplier: employee.overtime_multiplier,
+          emergencyContact: employee.emergency_contact,
+          address: employee.address,
+          shiftIn: formatTime(employee.shift_in),
+          shiftOut: formatTime(employee.shift_out),
+          status: employee.status,
+          avatar: "/placeholder-user.jpg"
+        }))
+
+        setEmployees(mappedEmployees)
+
+        // Extract pagination info
+        if (data.count !== undefined) {
+          setTotalCount(data.count)
         }
-
-        if (filterBranch !== "all") {
-          params.append("branch_id", filterBranch)
+        if (data.next !== undefined) {
+          setNextPage(data.next)
         }
-
-        if (filterRole !== "all") {
-          params.append("role_id", filterRole)
+        if (data.previous !== undefined) {
+          setPreviousPage(data.previous)
         }
-
-        console.log('Fetching with params:', params.toString())
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/employee/?${params.toString()}`, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          },
-          credentials: 'omit',
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          console.log('Employees fetched:', data)
-
-          // Map API data to component format
-          const mappedEmployees = (data.results || data).map(employee => ({
-            id: employee.id,
-            name: employee.name,
-            email: employee.email,
-            phone: employee.phone,
-            role: employee.role?.name || "Unknown Role",
-            roleId: employee.role?.id,
-            branch: employee.branch?.name || "Unknown Branch",
-            branchId: employee.branch?.id,
-            baseSalary: parseFloat(employee.base_salary || 0),
-            joiningDate: employee.joining_date,
-            workingHours: employee.working_hours,
-            overtimeMultiplier: employee.overtime_multiplier,
-            emergencyContact: employee.emergency_contact,
-            address: employee.address,
-            shiftIn: employee.shift_in,
-            shiftOut: employee.shift_out,
-            status: employee.status,
-            avatar: "/placeholder-user.jpg"
-          }))
-
-          setEmployees(mappedEmployees)
-
-          // Extract pagination info
-          if (data.count !== undefined) {
-            setTotalCount(data.count)
-          }
-          if (data.next !== undefined) {
-            setNextPage(data.next)
-          }
-          if (data.previous !== undefined) {
-            setPreviousPage(data.previous)
-          }
-        } else {
-          toast({
-            title: "Error",
-            description: "Failed to fetch employees",
-            variant: "destructive",
-          })
-        }
-      } catch (error) {
-        console.error('Error fetching employees:', error)
+      } else {
         toast({
           title: "Error",
           description: "Failed to fetch employees",
           variant: "destructive",
         })
-      } finally {
-        setIsLoading(false)
       }
+    } catch (error) {
+      console.error('Error fetching employees:', error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch employees",
+        variant: "destructive",
+        })
+    } finally {
+      setIsLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchEmployees()
   }, [debouncedSearchTerm, filterBranch, filterRole, currentPage])
 
@@ -286,11 +297,11 @@ const EmployeeList = () => {
     setShowAddForm(true)
   }
 
-  const handleCloseAddForm = async () => {
+  const handleCloseAddForm = () => {
     setShowAddForm(false)
     setEditEmployee(null)
     // Refresh employee list when form is closed
-    await fetchEmployees()
+    fetchEmployees()
   }
 
   if (showAddForm) {

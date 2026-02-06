@@ -20,6 +20,17 @@ const AddEmployeeForm = ({ onClose, editEmployee = null }) => {
   const [roles, setRoles] = useState([])
   const [isLoadingData, setIsLoadingData] = useState(true)
 
+  // Helper function to convert HH:MM:SS to HH:MM
+  const formatTime = (timeString) => {
+    if (!timeString) return timeString
+    // If time is in HH:MM:SS format, convert to HH:MM
+    const parts = timeString.split(':')
+    if (parts.length === 3) {
+      return `${parts[0]}:${parts[1]}`
+    }
+    return timeString
+  }
+
   const [formData, setFormData] = useState({
     name: editEmployee?.name || "",
     email: editEmployee?.email || "",
@@ -28,8 +39,8 @@ const AddEmployeeForm = ({ onClose, editEmployee = null }) => {
     branch_id: editEmployee?.branch_id || "",
     role_id: editEmployee?.role_id || "",
     base_salary: editEmployee?.base_salary || "",
-    shift_in: editEmployee?.shift_in || "09:00",
-    shift_out: editEmployee?.shift_out || "18:00",
+    shift_in: formatTime(editEmployee?.shift_in) || "09:00",
+    shift_out: formatTime(editEmployee?.shift_out) || "18:00",
     working_hours: editEmployee?.working_hours || "9",
     overtime_multiplier: editEmployee?.overtime_multiplier || "1",
     joining_date: editEmployee?.joining_date || "",
