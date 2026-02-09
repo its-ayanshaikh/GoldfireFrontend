@@ -43,7 +43,7 @@ import {
 
 const TaskManagement = () => {
   const { toast } = useToast()
-  const [currentSubView, setCurrentSubView] = useState("task-list") // Added submenu state
+  const [currentSubView, setCurrentSubView] = useState("task-submissions") // Task Submissions selected by default
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedEmployee, setSelectedEmployee] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -312,7 +312,14 @@ const TaskManagement = () => {
           notes: submission.notes || "",
         }))
 
-        setTaskSubmissions(formattedSubmissions)
+        // Sort: completed tasks first, then others
+        const sortedSubmissions = formattedSubmissions.sort((a, b) => {
+          if (a.status === "completed" && b.status !== "completed") return -1
+          if (a.status !== "completed" && b.status === "completed") return 1
+          return 0
+        })
+
+        setTaskSubmissions(sortedSubmissions)
 
         // Extract pagination info
         if (data.count !== undefined) {
@@ -686,8 +693,8 @@ const TaskManagement = () => {
   }
 
   const submenuItems = [
-    { id: "task-list", label: "Task List", icon: List },
     { id: "task-submissions", label: "Task Submissions", icon: Calendar },
+    { id: "task-list", label: "Task List", icon: List },
   ]
 
   const renderTaskSubmissions = () => {
@@ -1533,7 +1540,7 @@ const TaskManagement = () => {
 
       {/* Submission View Dialog */}
       <Dialog open={isSubmissionViewOpen} onOpenChange={setIsSubmissionViewOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Task Submission Details</DialogTitle>
             <DialogDescription>View detailed submission information</DialogDescription>
@@ -1583,7 +1590,10 @@ const TaskManagement = () => {
                           <img
                             src={fullPhotoUrl}
                             alt={`Submission photo ${index + 1}`}
-                            onClick={() => setSelectedPhoto(fullPhotoUrl)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedPhoto(fullPhotoUrl)
+                            }}
                             className="w-full h-24 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-opacity"
                           />
                         </div>
@@ -1601,14 +1611,20 @@ const TaskManagement = () => {
       {selectedPhoto && (
         <div
           className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
-          onClick={() => setSelectedPhoto(null)}
+          onClick={(e) => {
+            e.stopPropagation()
+            setSelectedPhoto(null)
+          }}
         >
           <div
             className="relative max-w-2xl w-full max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              onClick={() => setSelectedPhoto(null)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setSelectedPhoto(null)
+              }}
               className="absolute -top-10 right-0 text-white hover:text-gray-300 transition-colors"
             >
               <X className="w-8 h-8" />
@@ -1617,6 +1633,7 @@ const TaskManagement = () => {
               src={selectedPhoto}
               alt="Full view"
               className="w-full h-full object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
             />
           </div>
         </div>
