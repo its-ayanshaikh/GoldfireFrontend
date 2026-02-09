@@ -246,7 +246,6 @@ export default function ProductList() {
 
 
   const handleDelete = async (productId) => {
-    console.log("[v0] Deleting product with ID:", productId)
     
     try {
       const token = localStorage.getItem('access_token')
@@ -425,7 +424,12 @@ export default function ProductList() {
                     return (
                       <tr key={p.id} className="border-b border-border align-top">
                         <td className="p-3">
-                          <div className="font-medium text-foreground">{p.name}</div>
+                          <div className="font-medium text-foreground">
+                            {p.category_name === "Cover" 
+                              ? `${p.subcategory_name || "Unknown"} - ${p.brand_name || "Unknown"}`
+                              : p.name
+                            }
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             Category: {p.category_name || "-"}
                           </div>
@@ -590,7 +594,10 @@ export default function ProductList() {
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {selectedVariantProduct?.name} - Variants & Models
+              {selectedVariantProduct?.category_name === "Cover"
+                ? `${selectedVariantProduct?.subcategory_name || "Unknown"} - ${selectedVariantProduct?.brand_name || "Unknown"} - Variants & Models`
+                : `${selectedVariantProduct?.name} - Variants & Models`
+              }
             </DialogTitle>
           </DialogHeader>
           
@@ -705,7 +712,10 @@ export default function ProductList() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {selectedProduct?.name} - Details
+              {selectedProduct?.category_name === "Cover"
+                ? `${selectedProduct?.subcategory_name || "Unknown"} - ${selectedProduct?.brand_name || "Unknown"} - Details`
+                : `${selectedProduct?.name} - Details`
+              }
             </DialogTitle>
           </DialogHeader>
           

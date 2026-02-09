@@ -563,7 +563,8 @@ export default function ProductForm({
         setSaveSuccess(false)
 
         try {
-            if (!productData.productForm.name.trim()) {
+            // Product name is not required for Cover category
+            if (categoryName !== "Cover" && !productData.productForm.name.trim()) {
                 throw new Error('Product name is required')
             }
 
@@ -736,18 +737,20 @@ export default function ProductForm({
 
             {/* Main Form Fields */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Product Name */}
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Product Name *</label>
-                    <input
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        value={productData.productForm.name}
-                        onChange={(e) => updateProductData({
-                            productForm: { ...productData.productForm, name: e.target.value }
-                        })}
-                        placeholder="Enter product name"
-                    />
-                </div>
+                {/* Product Name - Hide for Cover category */}
+                {categoryName !== "Cover" && (
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">Product Name *</label>
+                        <input
+                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                            value={productData.productForm.name}
+                            onChange={(e) => updateProductData({
+                                productForm: { ...productData.productForm, name: e.target.value }
+                            })}
+                            placeholder="Enter product name"
+                        />
+                    </div>
+                )}
 
                 {/* HSN Code */}
                 <div className="space-y-2">
