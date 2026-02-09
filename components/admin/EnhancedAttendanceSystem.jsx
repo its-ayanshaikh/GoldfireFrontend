@@ -853,28 +853,25 @@ const EnhancedAttendanceSystem = () => {
                         
                         {/* Check-in/Check-out Images */}
                         
-                        <div className="mt-3 pt-3 border-t border-border flex flex-col sm:flex-row gap-2">
+                        <div className="mt-3 pt-3 border-t border-border flex flex-row gap-2">
                           {/* View Attendance Button */}
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="flex-1 text-xs sm:text-sm"
+                            className="flex-1 h-10 sm:h-9 px-3 sm:px-4 text-sm font-medium"
                             onClick={() => handleEmployeeSelect(employee)}
                           >
-                            <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                            <Eye className="h-4 w-4 mr-2" />
                             View
                           </Button>
                           
                           {/* Update Attendance Button */}
                           <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 text-xs sm:text-sm"
+                            variant="default"
+                            className="flex-1 h-10 sm:h-9 px-3 sm:px-4 text-sm font-medium"
                             onClick={(e) => handleUpdateAttendanceClick(e, employee)}
                           >
-                            <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                            <span className="hidden sm:inline">Update Attendance</span>
-                            <span className="sm:hidden">Update</span>
+                            <Clock className="h-4 w-4 mr-2" />
+                            Update
                           </Button>
                         </div>
                       </CardContent>
@@ -885,6 +882,32 @@ const EnhancedAttendanceSystem = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Image Modal for employee list view */}
+        {isImageModalOpen && selectedImage && (
+          <div 
+            className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90"
+            style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh' }}
+            onClick={() => setIsImageModalOpen(false)}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsImageModalOpen(false)
+              }}
+              className="absolute top-4 right-4 p-3 rounded-full bg-white text-black hover:bg-gray-200 z-10"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            
+            <img
+              src={selectedImage}
+              alt="Attendance"
+              className="max-w-[90vw] max-h-[90vh] object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )}
       </div>
     )
   }
