@@ -44,6 +44,9 @@ export default function PurchaseAdd() {
   // Products state
   const [products, setProducts] = useState([])
   const [isLoadingProducts, setIsLoadingProducts] = useState(false)
+  const [isLoadingProductsMore, setIsLoadingProductsMore] = useState(false)
+  const [productsNext, setProductsNext] = useState(null)
+  const [productsPage, setProductsPage] = useState(1)
   
   // Variants state
   const [variants, setVariants] = useState([])
@@ -71,6 +74,7 @@ export default function PurchaseAdd() {
   // Dropdown search states
   const [productSearch, setProductSearch] = useState("")
   const [variantSearch, setVariantSearch] = useState("")
+  const [productSearchDebounced, setProductSearchDebounced] = useState("")
   const [showProductDropdown, setShowProductDropdown] = useState(false)
   const [showVariantDropdown, setShowVariantDropdown] = useState(false)
   const [productFocusIndex, setProductFocusIndex] = useState(-1)
@@ -80,6 +84,26 @@ export default function PurchaseAdd() {
   const serialInputRef = useRef(null)
   const productDropdownRef = useRef(null)
   const variantDropdownRef = useRef(null)
+  const productListRef = useRef(null)
+  const variantListRef = useRef(null)
+  const productItemRefs = useRef([])
+  const variantItemRefs = useRef([])
+  const productSearchTimer = useRef(null)
+
+  const normalizeProducts = (data) => {
+    const list = Array.isArray(data?.results?.results)
+      ? data.results.results
+      : Array.isArray(data?.results)
+        ? data.results
+        : Array.isArray(data?.data)
+          ? data.data
+          : []
+
+    return {
+      items: list,
+      next: data?.next ?? null
+    }
+  }
 
   // Fetch vendors from API
   const fetchVendors = async () => {
@@ -118,11 +142,21 @@ export default function PurchaseAdd() {
   }
 
   // Fetch products from API
-  const fetchProducts = async () => {
+  const fetchProducts = async (page = 1, replace = false) => {
     try {
-      setIsLoadingProducts(true)
+      if (page === 1) {
+        setIsLoadingProducts(true)
+      } else {
+        setIsLoadingProductsMore(true)
+      }
       const token = localStorage.getItem("access_token")
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/dropdown/`, {
+      const params = new URLSearchParams()
+      params.append("page", String(page))
+      params.append("page_size", "20")
+      if (productSearchDebounced.trim()) {
+        params.append("search", productSearchDebounced.trim())
+      }
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/product/dropdown/?${params.toString()}`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -134,7 +168,10 @@ export default function PurchaseAdd() {
       if (response.ok) {
         const data = await response.json()
         console.log("Products data:", data)
-        setProducts(data.data || [])
+        const normalized = normalizeProducts(data)
+        setProducts(prev => replace ? normalized.items : [...prev, ...normalized.items])
+        setProductsNext(normalized.next)
+        setProductsPage(page)
       } else {
         console.error("Products fetch failed:", response.status)
         toast({
@@ -152,6 +189,7 @@ export default function PurchaseAdd() {
       })
     } finally {
       setIsLoadingProducts(false)
+      setIsLoadingProductsMore(false)
     }
   }
 
@@ -318,7 +356,6 @@ export default function PurchaseAdd() {
   // Load vendors, products, branches and set today's date on component mount
   useEffect(() => {
     fetchVendors()
-    fetchProducts()
     fetchBranches()
     
     // If edit mode, fetch purchase details
@@ -332,6 +369,21 @@ export default function PurchaseAdd() {
       }))
     }
   }, [id, isEditMode])
+
+  useEffect(() => {
+    if (productSearchTimer.current) {
+      clearTimeout(productSearchTimer.current)
+    }
+    productSearchTimer.current = setTimeout(() => {
+      setProductSearchDebounced(productSearch)
+    }, 300)
+
+    return () => clearTimeout(productSearchTimer.current)
+  }, [productSearch])
+
+  useEffect(() => {
+    fetchProducts(1, true)
+  }, [productSearchDebounced])
 
   const handleProductChange = (productId) => {
     setItemForm(prev => ({
@@ -361,10 +413,8 @@ export default function PurchaseAdd() {
     setVariantFocusIndex(-1)
   }
 
-  // Filter products based on search
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(productSearch.toLowerCase())
-  )
+  // Products are fetched with server-side search
+  const filteredProducts = products
 
   // Filter variants based on search
   const filteredVariants = variants.filter(v => 
@@ -451,6 +501,32 @@ export default function PurchaseAdd() {
   useEffect(() => {
     setVariantFocusIndex(0)
   }, [variantSearch])
+
+  useEffect(() => {
+    if (!showProductDropdown) return
+    if (productFocusIndex < 0) return
+    const node = productItemRefs.current[productFocusIndex]
+    if (node && node.scrollIntoView) {
+      node.scrollIntoView({ block: "nearest" })
+    }
+  }, [productFocusIndex, showProductDropdown])
+
+  useEffect(() => {
+    if (!showVariantDropdown) return
+    if (variantFocusIndex < 0) return
+    const node = variantItemRefs.current[variantFocusIndex]
+    if (node && node.scrollIntoView) {
+      node.scrollIntoView({ block: "nearest" })
+    }
+  }, [variantFocusIndex, showVariantDropdown])
+
+  const handleProductScroll = (event) => {
+    const target = event.currentTarget
+    if (!productsNext || isLoadingProductsMore) return
+    if (target.scrollTop + target.clientHeight >= target.scrollHeight - 40) {
+      fetchProducts(productsPage + 1, false)
+    }
+  }
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -888,8 +964,55 @@ export default function PurchaseAdd() {
     }
   }
 
+  const resolveBranchName = (branchId, fallback) => {
+    if (fallback) return fallback
+    const match = branches.find((branch) => String(branch.id) === String(branchId))
+    return match?.name || ""
+  }
+
+  const getItemBranches = (item) => {
+    if (Array.isArray(item.branches) && item.branches.length > 0) {
+      return item.branches
+        .map((branch) => ({
+          branchName: resolveBranchName(branch.branch || branch.branch_id, branch.branch_name || branch.name),
+          qty: branch.qty ?? branch.quantity ?? 0
+        }))
+        .filter((branch) => parseInt(branch.qty) > 0)
+    }
+
+    if (Array.isArray(item.stocks) && item.stocks.length > 0) {
+      return item.stocks
+        .map((stock) => ({
+          branchName: resolveBranchName(
+            stock.branch?.id || stock.branch_id || stock.branch,
+            stock.branch?.name || stock.branch_name
+          ),
+          qty: stock.qty ?? stock.quantity ?? 0
+        }))
+        .filter((branch) => parseInt(branch.qty) > 0)
+    }
+
+    if (item.branch_qty && typeof item.branch_qty === "object") {
+      return Object.entries(item.branch_qty)
+        .map(([branchId, qty]) => ({
+          branchName: resolveBranchName(branchId),
+          qty: qty
+        }))
+        .filter((branch) => parseInt(branch.qty) > 0)
+    }
+
+    if (item.branch_name || item.branch) {
+      return [{
+        branchName: resolveBranchName(item.branch, item.branch_name),
+        qty: item.qty ?? 0
+      }].filter((branch) => parseInt(branch.qty) > 0)
+    }
+
+    return []
+  }
+
   // Barcode printing function - same as BarcodePrinting component
-  const printBarcodes = (item, quantity = 1) => {
+  const printBarcodes = (item, quantity = 1, branchName = "") => {
     const { barcode, selling_price, product_name, variant } = item
     const qty = parseInt(quantity) || 1
 
@@ -941,7 +1064,15 @@ export default function PurchaseAdd() {
     }
 
     const logoPath = window.location.origin + '/barcode_logo.jpg'
-    const displayName = variant ? variant.name : product_name
+    const rawName = variant?.name ? `${product_name} - ${variant.name}` : product_name
+    const displayName = rawName
+      ? rawName
+          .replace(/goldfire/gi, "")
+          .replace(/^[\s\-–—]+/, "")
+          .replace(/[\s\-–—]+$/, "")
+          .replace(/\s{2,}/g, " ")
+          .trim()
+      : ""
 
     // Create print content - no margins/padding, driver handles settings
     let printContent = `
@@ -1010,6 +1141,16 @@ export default function PurchaseAdd() {
             letter-spacing: 0.5px;
             color: #000;
           }
+          .item-name {
+            font-size: 8pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #000;
+            max-width: 36mm;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
           .price {
             font-size: 14pt;
             font-weight: bold;
@@ -1028,7 +1169,8 @@ export default function PurchaseAdd() {
       printContent += `
         <div class="barcode-label">
           <img class="logo" src="${logoPath}" alt="GoldFire" onerror="this.style.display='none'" />
-          <div class="branch-name">GOLDFIRE</div>
+          ${branchName ? `<div class="branch-name">${branchName}</div>` : ""}
+          <div class="item-name">${displayName || ""}</div>
           <img class="barcode-img" src="${barcodeImages[i]}" alt="barcode" />
           <div class="barcode-number">${barcode}</div>
           <div class="price">₹${Number(selling_price || 0).toLocaleString()}</div>
@@ -1040,7 +1182,9 @@ export default function PurchaseAdd() {
         printContent += `
           <div class="barcode-label">
             <img class="logo" src="${logoPath}" alt="GoldFire" onerror="this.style.display='none'" />
-            <div class="branch-name">GOLDFIRE</div>
+
+            ${branchName ? `<div class="branch-name">${branchName}</div>` : ""}
+            <div class="item-name">${displayName || ""}</div>
             <img class="barcode-img" src="${barcodeImages[i + 1]}" alt="barcode" />
             <div class="barcode-number">${barcode}</div>
             <div class="price">₹${Number(selling_price || 0).toLocaleString()}</div>
@@ -1521,7 +1665,7 @@ export default function PurchaseAdd() {
 
           <div className="space-y-4">
             {/* Product & Variant in one row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               {/* Custom Product Dropdown */}
               <div className="space-y-2">
                 <Label htmlFor="product">Product *</Label>
@@ -1557,11 +1701,18 @@ export default function PurchaseAdd() {
                       </div>
                       
                       {/* Scrollable List */}
-                      <div className="overflow-y-auto flex-1">
+                      <div
+                        className="overflow-y-auto flex-1"
+                        ref={productListRef}
+                        onScroll={handleProductScroll}
+                      >
                         {filteredProducts.length > 0 ? (
                           filteredProducts.map((product, idx) => (
                             <div
                               key={product.id}
+                              ref={(node) => {
+                                productItemRefs.current[idx] = node
+                              }}
                               onClick={() => handleProductChange(product.id.toString())}
                               className={`px-3 py-2 cursor-pointer text-sm ${
                                 itemForm.product === product.id.toString()
@@ -1577,6 +1728,11 @@ export default function PurchaseAdd() {
                         ) : (
                           <div className="px-3 py-2 text-sm text-muted-foreground text-center">
                             No products found
+                          </div>
+                        )}
+                        {isLoadingProductsMore && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground text-center">
+                            Loading more...
                           </div>
                         )}
                       </div>
@@ -1621,11 +1777,14 @@ export default function PurchaseAdd() {
                         </div>
                         
                         {/* Scrollable List */}
-                        <div className="overflow-y-auto flex-1">
+                        <div className="overflow-y-auto flex-1" ref={variantListRef}>
                           {filteredVariants.length > 0 ? (
                             filteredVariants.map((variant, idx) => (
                               <div
                                 key={variant.id}
+                                ref={(node) => {
+                                  variantItemRefs.current[idx] = node
+                                }}
                                 onClick={() => handleVariantChange(variant.id.toString())}
                                 className={`px-3 py-2 cursor-pointer text-sm ${
                                   itemForm.variant === variant.id.toString()
@@ -1775,30 +1934,71 @@ export default function PurchaseAdd() {
                         </div>
                       </div>
                       <div className="flex flex-col gap-2">
-                        <Input
-                          type="number"
-                          min="1"
-                          max={item.qty}
-                          defaultValue="1"
-                          placeholder="Qty"
-                          className="w-20"
-                          id={`qty-${index}`}
-                        />
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            const qtyInput = document.getElementById(`qty-${index}`)
-                            const qty = parseInt(qtyInput.value) || 1
-                            printBarcodes(item, qty)
-                            toast({
-                              title: "Printing",
-                              description: `Printing ${qty} barcode(s)...`,
-                            })
-                          }}
-                        >
-                          <Printer className="w-4 h-4 mr-1" />
-                          Print
-                        </Button>
+                        {(() => {
+                          const branchEntries = getItemBranches(item)
+                          if (branchEntries.length > 0) {
+                            return branchEntries.map((branch, branchIndex) => (
+                              <div key={`${index}-${branchIndex}`} className="flex items-center gap-2">
+                                <div className="text-xs text-muted-foreground w-28 truncate" title={branch.branchName}>
+                                  {branch.branchName || "Branch"}
+                                </div>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max={branch.qty}
+                                  defaultValue={branch.qty || 1}
+                                  placeholder="Qty"
+                                  className="w-20"
+                                  id={`qty-${index}-${branchIndex}`}
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    const qtyInput = document.getElementById(`qty-${index}-${branchIndex}`)
+                                    const qty = parseInt(qtyInput.value) || 1
+                                    printBarcodes(item, qty, branch.branchName)
+                                    toast({
+                                      title: "Printing",
+                                      description: `Printing ${qty} barcode(s)...`,
+                                    })
+                                  }}
+                                >
+                                  <Printer className="w-4 h-4 mr-1" />
+                                  Print
+                                </Button>
+                              </div>
+                            ))
+                          }
+
+                          return (
+                            <>
+                              <Input
+                                type="number"
+                                min="1"
+                                max={item.qty}
+                                defaultValue={item.qty || 1}
+                                placeholder="Qty"
+                                className="w-20"
+                                id={`qty-${index}`}
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  const qtyInput = document.getElementById(`qty-${index}`)
+                                  const qty = parseInt(qtyInput.value) || 1
+                                  printBarcodes(item, qty)
+                                  toast({
+                                    title: "Printing",
+                                    description: `Printing ${qty} barcode(s)...`,
+                                  })
+                                }}
+                              >
+                                <Printer className="w-4 h-4 mr-1" />
+                                Print
+                              </Button>
+                            </>
+                          )
+                        })()}
                       </div>
                     </div>
                   </Card>
@@ -1833,10 +2033,22 @@ export default function PurchaseAdd() {
               onClick={() => {
                 // Print all barcodes
                 if (purchaseResponse && purchaseResponse.items) {
+                  let delay = 0
                   purchaseResponse.items.forEach((item, index) => {
-                    const qtyInput = document.getElementById(`qty-${index}`)
-                    const qty = parseInt(qtyInput.value) || 1
-                    setTimeout(() => printBarcodes(item, qty), index * 500)
+                    const branchEntries = getItemBranches(item)
+                    if (branchEntries.length > 0) {
+                      branchEntries.forEach((branch, branchIndex) => {
+                        const qtyInput = document.getElementById(`qty-${index}-${branchIndex}`)
+                        const qty = parseInt(qtyInput?.value) || branch.qty || 1
+                        setTimeout(() => printBarcodes(item, qty, branch.branchName), delay)
+                        delay += 500
+                      })
+                    } else {
+                      const qtyInput = document.getElementById(`qty-${index}`)
+                      const qty = parseInt(qtyInput?.value) || item.qty || 1
+                      setTimeout(() => printBarcodes(item, qty), delay)
+                      delay += 500
+                    }
                   })
                   toast({
                     title: "Printing All",

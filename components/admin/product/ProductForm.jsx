@@ -619,6 +619,11 @@ export default function ProductForm({
                 payload.brand = productData.selectedBrandId
             }
 
+            // Add gender if available
+            if (productData.selectedGender) {
+                payload.gender = productData.selectedGender
+            }
+
             // Add warranty info
             payload.is_warranty_item = productData.hasWarranty || false
             if (productData.hasWarranty && productData.warrantyMonths) {

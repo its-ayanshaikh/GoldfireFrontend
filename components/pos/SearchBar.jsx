@@ -70,25 +70,31 @@ const SearchBar = ({ onProductSelect, selectedBranch, withBarcodeScanner }) => {
         let transformedProducts = []
 
         if (data.success && data.products && Array.isArray(data.products)) {
-          // New API response format with variant support
-          transformedProducts = data.products.map(product => ({
-            id: product.product_id,
-            variantId: product.variant_id || null,
-            name: product.name,
-            brand: product.brand || "",
-            subbrand: product.subbrand || "",
-            model: product.model || "",
-            price: parseFloat(product.selling_price) || 0,
-            minPrice: parseFloat(product.minimum_selling_price) || 0, // MSP - for salesperson only
-            barcode: product.barcode || "",
-            qty: product.qty || 0,
-            gst: product.gst || { cgst: 9, sgst: 9, igst: 0 },
-            isWarrantyItem: product.is_warranty_item || false,
-            warrantyPeriod: product.warranty_period,
-            hsnCode: product.hsn_code,
-            serialNumbers: product.serial_numbers || [],
-            searchType: product.search_type || "regular"
-          }))
+          // New API response format with purchase-wise lots
+          transformedProducts = data.products
+            .filter(product => product.qty > 0) // Filter out out of stock items
+            .map(product => ({
+              id: product.product_id,
+              variantId: product.variant_id || null,
+              purchaseItemId: product.purchase_item_id, // Store purchase_item_id for cart
+              purchaseId: product.purchase_id,
+              purchaseDate: product.purchase_date,
+              purchaseBillNo: product.purchase_bill_no,
+              name: product.name,
+              brand: product.brand || "",
+              subbrand: product.subbrand || "",
+              model: product.model || "",
+              price: parseFloat(product.selling_price) || 0,
+              minPrice: parseFloat(product.minimum_selling_price) || 0,
+              barcode: product.barcode || "",
+              qty: product.qty || 0,
+              gst: product.gst || { cgst: 9, sgst: 9, igst: 18 },
+              isWarrantyItem: product.is_warranty_item || false,
+              warrantyPeriod: product.warranty_period,
+              hsnCode: product.hsn_code,
+              serialNumbers: product.serial_numbers || [],
+              searchType: product.search_type || "regular"
+            }))
 
           console.log('SearchBar - Transformed products:', transformedProducts)
         }
@@ -236,6 +242,10 @@ const SearchBar = ({ onProductSelect, selectedBranch, withBarcodeScanner }) => {
                 const transformedProduct = {
                   id: product.product_id,
                   variantId: product.variant_id || null,
+                  purchaseItemId: product.purchase_item_id, // Store purchase_item_id for cart
+                  purchaseId: product.purchase_id,
+                  purchaseDate: product.purchase_date,
+                  purchaseBillNo: product.purchase_bill_no,
                   name: product.name,
                   brand: product.brand || "",
                   subbrand: product.subbrand || "",
@@ -244,7 +254,7 @@ const SearchBar = ({ onProductSelect, selectedBranch, withBarcodeScanner }) => {
                   minPrice: parseFloat(product.minimum_selling_price) || 0,
                   barcode: product.barcode,
                   qty: product.qty || 0,
-                  gst: product.gst || { cgst: 9, sgst: 9, igst: 0 },
+                  gst: product.gst || { cgst: 9, sgst: 9, igst: 18 },
                   isWarrantyItem: product.is_warranty_item || false,
                   warrantyPeriod: product.warranty_period,
                   hsnCode: product.hsn_code,

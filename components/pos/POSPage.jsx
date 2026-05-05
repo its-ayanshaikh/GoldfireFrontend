@@ -304,7 +304,11 @@ const POSPage = () => {
           quantity: 1,
           gst: product.gst || { cgst: 9, sgst: 9, igst: 18 },
           serialNumber: product.serialNumber || null,
-          serialNumbers: product.serialNumber ? [product.serialNumber] : []
+          serialNumbers: product.serialNumber ? [product.serialNumber] : [],
+          purchaseItemId: product.purchaseItemId, // Store purchase_item_id for backend
+          purchaseId: product.purchaseId,
+          purchaseDate: product.purchaseDate,
+          purchaseBillNo: product.purchaseBillNo
         }
         console.log('Cart product to add:', cartProduct)
         return [...prevCartItems, cartProduct]

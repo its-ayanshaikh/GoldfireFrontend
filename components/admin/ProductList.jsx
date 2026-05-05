@@ -421,6 +421,8 @@ export default function ProductList() {
                     
                     const low = qty <= (p.min_qty_alert ?? 0)
 
+                    const genderLabel = p.gender || p.gender_name || "-"
+
                     return (
                       <tr key={p.id} className="border-b border-border align-top">
                         <td className="p-3">
@@ -432,6 +434,9 @@ export default function ProductList() {
                           </div>
                           <div className="text-xs text-muted-foreground">
                             Category: {p.category_name || "-"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Gender: {genderLabel}
                           </div>
                         </td>
                         <td className="p-3 text-foreground">
