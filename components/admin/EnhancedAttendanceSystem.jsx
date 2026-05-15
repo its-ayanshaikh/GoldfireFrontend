@@ -89,98 +89,100 @@ const EnhancedAttendanceSystem = () => {
   const [attendanceError, setAttendanceError] = useState(null)
 
   // API function to fetch employees with pagination
-  useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const token = localStorage.getItem("access_token")
+  const fetchEmployeesData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const token = localStorage.getItem("access_token")
 
-        if (!token) {
-          throw new Error('No authentication token found')
-        }
-
-        // Build query parameters
-        const params = new URLSearchParams()
-        params.append("page", currentPage)
-
-        if (debouncedSearchTerm) {
-          params.append("search", debouncedSearchTerm)
-        }
-
-        if (filterBranch !== "all") {
-          params.append("branch", filterBranch)
-        }
-
-        console.log('Fetching with params:', params.toString())
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/employee/?${params.toString()}`, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        const data = await response.json()
-        console.log('API Response:', data)
-        console.log('Filter Branch:', filterBranch)
-        // Handle both array and paginated responses
-        let employeeList = []
-        if (Array.isArray(data)) {
-          employeeList = data
-        } else if (data.results) {
-          employeeList = data.results
-        } else if (data.data) {
-          employeeList = data.data
-        }
-
-        // Transform API data to component format
-        const transformedData = employeeList.map(employee => ({
-          id: employee.id,
-          employeeId: employee.id,
-          name: employee.name,
-          role: employee.role?.name || 'Employee',
-          branch: employee.branch?.name || 'N/A',
-          branchId: employee.branch?.id || null,
-          avatar: employee.profile_picture || "/placeholder-user.jpg",
-          baseSalary: parseFloat(employee.base_salary || 0),
-          phone: employee.phone,
-          email: employee.email,
-          joiningDate: employee.joining_date,
-          status: employee.status,
-          todayStatus: employee.today_status || null, // Add today_status from API
-          checkInTime: employee.check_in_time || null, // Add check_in_time from API
-          checkInImage: employee.check_in_image || null, // Add check_in_image from API
-          checkOutImage: employee.check_out_image || null // Add check_out_image from API
-        }))
-
-        setEmployees(transformedData)
-
-        // Extract pagination info
-        if (data.count !== undefined) {
-          setTotalCount(data.count)
-        }
-        if (data.next !== undefined) {
-          setNextPage(data.next)
-        }
-        if (data.previous !== undefined) {
-          setPreviousPage(data.previous)
-        }
-
-      } catch (error) {
-        console.error('Error fetching employees:', error)
-        setError(error.message)
-        setEmployees([])
-      } finally {
-        setLoading(false)
+      if (!token) {
+        throw new Error('No authentication token found')
       }
-    }
 
-    fetchEmployees()
+      // Build query parameters
+      const params = new URLSearchParams()
+      params.append("page", currentPage)
+
+      if (debouncedSearchTerm) {
+        params.append("search", debouncedSearchTerm)
+      }
+
+      if (filterBranch !== "all") {
+        params.append("branch", filterBranch)
+      }
+
+      console.log('Fetching with params:', params.toString())
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/employee/?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('API Response:', data)
+      console.log('Filter Branch:', filterBranch)
+      // Handle both array and paginated responses
+      let employeeList = []
+      if (Array.isArray(data)) {
+        employeeList = data
+      } else if (data.results) {
+        employeeList = data.results
+      } else if (data.data) {
+        employeeList = data.data
+      }
+
+      // Transform API data to component format
+      const transformedData = employeeList.map(employee => ({
+        id: employee.id,
+        employeeId: employee.id,
+        name: employee.name,
+        role: employee.role?.name || 'Employee',
+        branch: employee.branch?.name || 'N/A',
+        branchId: employee.branch?.id || null,
+        avatar: employee.profile_picture || "/placeholder-user.jpg",
+        baseSalary: parseFloat(employee.base_salary || 0),
+        phone: employee.phone,
+        email: employee.email,
+        joiningDate: employee.joining_date,
+        status: employee.status,
+        todayStatus: employee.today_status || null, // Add today_status from API
+        checkInTime: employee.check_in_time || null, // Add check_in_time from API
+        checkInImage: employee.check_in_image || null, // Add check_in_image from API
+        checkOutImage: employee.check_out_image || null, // Add check_out_image from API
+        isLate: employee.is_late || false
+      }))
+
+      setEmployees(transformedData)
+
+      // Extract pagination info
+      if (data.count !== undefined) {
+        setTotalCount(data.count)
+      }
+      if (data.next !== undefined) {
+        setNextPage(data.next)
+      }
+      if (data.previous !== undefined) {
+        setPreviousPage(data.previous)
+      }
+
+    } catch (error) {
+      console.error('Error fetching employees:', error)
+      setError(error.message)
+      setEmployees([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // API function to fetch employees with pagination
+  useEffect(() => {
+    fetchEmployeesData()
   }, [debouncedSearchTerm, filterBranch, currentPage])
 
   // API function to fetch branches
@@ -395,8 +397,12 @@ const EnhancedAttendanceSystem = () => {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      // Refresh attendance data
+      // Refresh attendance data for selected employee
       await fetchEmployeeAttendance(selectedEmployee.id, selectedMonth, selectedYear)
+      
+      // Refresh employee list to get updated today's status and check-in/out times
+      await fetchEmployeesData()
+      
       setIsEditDialogOpen(false)
       toast({
         title: "Success",
@@ -691,7 +697,7 @@ const EnhancedAttendanceSystem = () => {
 
   if (!selectedEmployee) {
     return (
-      <div className="p-6">
+      <div className="p-0 sm:p-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
             <Clock className="h-8 w-8" />
@@ -851,8 +857,18 @@ const EnhancedAttendanceSystem = () => {
                           </div>
                         )}
                         
-                        {/* Check-in/Check-out Images */}
-                        
+                        {employee.isLate && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">Late Request</Badge>
+                            <Button variant="outline" size="sm" className="h-8 px-3 text-xs">
+                              Approve
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-8 px-3 text-xs text-destructive">
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+
                         <div className="mt-3 pt-3 border-t border-border flex flex-row gap-2">
                           {/* View Attendance Button */}
                           <Button
@@ -926,21 +942,21 @@ const EnhancedAttendanceSystem = () => {
         workingHours: record.totalHours,
         overtimeHours: record.overtimeHours,
         breakHours: record.breakHours,
-        isLate: false, // Can be calculated based on expected check-in time
+        isLate: record.is_late || false,
         hasBreak: false,
         breaks: []
       }
     })
     : []
-  const presentDays = isClient ? monthlyAttendance.filter((day) => day.status === "present").length : 0
-  const absentDays = isClient ? monthlyAttendance.filter((day) => day.status === "absent").length : 0
-  const halfDays = isClient ? monthlyAttendance.filter((day) => day.status === "half-day").length : 0
+  const totalLateDays = isClient ? monthlyAttendance.filter((day) => day.isLate).length : 0
   const holidays = isClient ? monthlyAttendance.filter((day) => day.status === "holiday").length : 0
   const totalWorkingHours = isClient ? monthlyAttendance.reduce((sum, day) => {
     const hours = typeof day.workingHours === 'number' ? day.workingHours : 0
     return sum + hours
   }, 0) : 0
   const totalOvertimeHours = isClient ? monthlyAttendance.reduce((sum, day) => sum + (day.overtimeHours || 0), 0) : 0
+  const totalBreakHours = isClient ? monthlyAttendance.reduce((sum, day) => sum + (day.breakHours || 0), 0) : 0
+  const workingDays = isClient ? monthlyAttendance.filter((day) => day.status === "present" || day.status === "half-day").length : 0
 
   return (
     <>
@@ -1111,7 +1127,7 @@ const EnhancedAttendanceSystem = () => {
       ) : (
         // Employee Detail View
         <>
-          <div className="mb-6">
+          <div className="mb-4 px-2 sm:px-0">
             <div className="flex items-center gap-4 mb-4">
               <Button variant="outline" onClick={() => setSelectedEmployee(null)} className="flex items-center gap-2">
                 <ArrowLeft className="h-4 w-4" />
@@ -1127,20 +1143,21 @@ const EnhancedAttendanceSystem = () => {
             </p>
           </div>
 
-          {/* Month/Year Selection */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Select Month & Year</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Month</Label>
+          <div className="px-2 sm:px-0 pt-1 pb-3 space-y-2">
+            {/* Filters Bar */}
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-2 py-2 sm:px-4">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Filters</div>
+                <div className="text-[10px] text-muted-foreground">Month & Year</div>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Month</Label>
                   <Select
                     value={selectedMonth.toString()}
                     onValueChange={(value) => handleMonthChange(Number.parseInt(value))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1152,13 +1169,13 @@ const EnhancedAttendanceSystem = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>Year</Label>
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Year</Label>
                   <Select
                     value={selectedYear.toString()}
                     onValueChange={(value) => handleYearChange(Number.parseInt(value))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1171,82 +1188,84 @@ const EnhancedAttendanceSystem = () => {
                   </Select>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Monthly Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Present</p>
-                    <p className="text-lg font-semibold">{presentDays}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <XCircle className="h-5 w-5 text-red-600" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Absent</p>
-                    <p className="text-lg font-semibold">{absentDays}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-yellow-600" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Half Days</p>
-                    <p className="text-lg font-semibold">{halfDays}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Holidays</p>
-                    <p className="text-lg font-semibold">{holidays}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-purple-600" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Hours</p>
-                    <p className="text-lg font-semibold">{(totalWorkingHours || 0).toFixed(1)}h</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Overtime Hours</p>
-                    <p className="text-lg font-semibold text-blue-600">+{parseFloat(totalOvertimeHours || 0).toFixed(2)}h</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Monthly Stats */}
+            <div className="sticky top-0 z-20 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                <Card>
+                  <CardContent className="p-2 md:p-4">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-orange-600" />
+                      <div>
+                        <p className="text-[10px] md:text-sm text-muted-foreground">Late Days</p>
+                        <p className="text-xs md:text-lg font-semibold">{totalLateDays}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-2 md:p-4">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
+                      <div>
+                        <p className="text-[10px] md:text-sm text-muted-foreground">Holidays</p>
+                        <p className="text-xs md:text-lg font-semibold">{holidays}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-2 md:p-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+                      <div>
+                        <p className="text-[10px] md:text-sm text-muted-foreground">Working Days</p>
+                        <p className="text-xs md:text-lg font-semibold">{workingDays}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-2 md:p-4">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
+                      <div>
+                        <p className="text-[10px] md:text-sm text-muted-foreground">Total Hours</p>
+                        <p className="text-xs md:text-lg font-semibold">{(totalWorkingHours || 0).toFixed(1)}h</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-2 md:p-4">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
+                      <div>
+                        <p className="text-[10px] md:text-sm text-muted-foreground">Overtime</p>
+                        <p className="text-xs md:text-lg font-semibold text-blue-600">+{parseFloat(totalOvertimeHours || 0).toFixed(2)}h</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-2 md:p-4">
+                    <div className="flex items-center gap-2">
+                      <Coffee className="h-4 w-4 md:h-5 md:w-5 text-orange-600" />
+                      <div>
+                        <p className="text-[10px] md:text-sm text-muted-foreground">Break Hours</p>
+                        <p className="text-xs md:text-lg font-semibold">{parseFloat(totalBreakHours || 0).toFixed(1)}h</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </div>
 
           {/* Monthly Attendance Table */}
-          <Card>
-            <CardHeader>
+          <Card className="rounded-none border-0 shadow-none">
+            <CardHeader className="px-2 sm:px-0">
               <CardTitle>
                 {months[selectedMonth]} {selectedYear} Attendance
               </CardTitle>
@@ -1254,8 +1273,8 @@ const EnhancedAttendanceSystem = () => {
                 Daily check-in and check-out details. Click "Add Break" to record unauthorized breaks.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
+            <CardContent className="px-2 sm:px-0 pb-4">
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-border">
@@ -1358,6 +1377,90 @@ const EnhancedAttendanceSystem = () => {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-3">
+                {!isClient ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    Loading attendance data...
+                  </div>
+                ) : attendanceLoading ? (
+                  <div className="p-6 text-center">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mr-3"></div>
+                      <span className="text-muted-foreground">Fetching employee attendance...</span>
+                    </div>
+                  </div>
+                ) : attendanceError ? (
+                  <div className="p-6 text-center">
+                    <div className="text-red-500">
+                      <p className="font-medium">Error Loading Attendance</p>
+                      <p className="text-sm text-muted-foreground">{attendanceError}</p>
+                      <Button
+                        onClick={() => fetchEmployeeAttendance(selectedEmployee.id)}
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                      >
+                        Try Again
+                      </Button>
+                    </div>
+                  </div>
+                ) : monthlyAttendance.length === 0 ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    No attendance data found for this employee
+                  </div>
+                ) : (
+                  monthlyAttendance.map((day) => (
+                    <Card key={day.date} className="border border-border" onClick={() => handleEditAttendance(day)}>
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm text-muted-foreground">{day.day}</div>
+                            <div className="text-lg font-semibold">{day.date}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {day.isLate && (
+                              <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">Late</Badge>
+                            )}
+                            {getStatusBadge(day.status)}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div className="rounded-lg border border-border p-2">
+                            <div className="text-muted-foreground">Check In</div>
+                            <div className="font-medium">{day.checkIn || "Add"}</div>
+                          </div>
+                          <div className="rounded-lg border border-border p-2">
+                            <div className="text-muted-foreground">Check Out</div>
+                            <div className="font-medium">{day.checkOut || "Add"}</div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div className="rounded-lg bg-muted/40 p-2 text-center">
+                            <div className="text-muted-foreground">Hours</div>
+                            <div className="font-semibold">{day.workingHours > 0 ? `${day.workingHours}h` : "-"}</div>
+                          </div>
+                          <div className="rounded-lg bg-blue-50 p-2 text-center">
+                            <div className="text-muted-foreground">Overtime</div>
+                            <div className="font-semibold text-blue-700">{day.overtimeHours > 0 ? `+${parseFloat(day.overtimeHours).toFixed(2)}h` : "-"}</div>
+                          </div>
+                          <div className="rounded-lg bg-orange-50 p-2 text-center">
+                            <div className="text-muted-foreground">Break</div>
+                            <div className="font-semibold text-orange-700">{day.breakHours > 0 ? `${parseFloat(day.breakHours).toFixed(2)}h` : "-"}</div>
+                          </div>
+                        </div>
+
+                        <Button variant="outline" size="sm" className="w-full">
+                          Update Day
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

@@ -573,7 +573,7 @@ const AttendancePage = ({ user }) => {
                       <span>Shift:</span>
                     </div>
                     <span className="font-medium text-foreground">
-                      {user?.shift_in || "--:--"} - {user?.shift_out || "--:--"}
+                      {user?.shift_in ? user.shift_in.substring(0, 5) : "--:--"} - {user?.shift_out ? user.shift_out.substring(0, 5) : "--:--"}
                     </span>
                   </div>
                 )}
