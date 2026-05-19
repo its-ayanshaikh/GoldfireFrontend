@@ -52,6 +52,9 @@ const LoginPage = ({ onLogin }) => {
 
       if (response.ok) {
         // API response: { message, user: { id, username, user_type, branch, paid_leave_requested, paid_leave_status, is_on_leave_today, shift_in, shift_out }, tokens }
+        console.log('Login successful, API response:', data) // Debug log
+        console.log('User type from API:', data.user.user_type) // Debug log
+        
         const userData = {
           id: data.user.id,
           username: data.user.username,
@@ -65,11 +68,14 @@ const LoginPage = ({ onLogin }) => {
           shift_out: data.user.shift_out || null, // 24 hour format e.g. "18:00"
         }
         
+        console.log('User data being passed to onLogin:', userData) // Debug log
+        
         // Store tokens in localStorage for future API calls
         if (data.tokens) {
           localStorage.setItem('access_token', data.tokens.access)
           localStorage.setItem('refresh_token', data.tokens.refresh)
           localStorage.setItem('branch', data.user.branch)
+          localStorage.setItem('user_type', data.user.user_type) // Store user_type
         }
         
         // Request location permission after successful login

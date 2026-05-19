@@ -28,6 +28,7 @@ import PurchaseAdd from "./PurchaseAdd" // Added PurchaseAdd import
 import PurchaseList from "./PurchaseList" // Added PurchaseList import
 import PurchaseReturn from "./PurchaseReturn" // Added PurchaseReturn import
 import SettingsModule from "./SettingsModule" // Added SettingsModule import
+import TemporaryPOSPage from "../pos/TemporaryPOSPage" // Added TemporaryPOSPage import
 
 const AdminDashboard = ({ view, user, onLogout }) => {
   const location = useLocation()
@@ -138,7 +139,8 @@ const AdminDashboard = ({ view, user, onLogout }) => {
       '/admin/bill': 'bills-management',
       '/admin/vendor': 'vendor-management',
       '/admin/branch': 'branch-management',
-      '/admin/settings': 'settings'
+      '/admin/settings': 'settings',
+      '/admin/temporary-pos': 'temporary-pos'
     }
 
     const mappedView = pathToViewMap[location.pathname] || 'dashboard'
@@ -399,6 +401,8 @@ const AdminDashboard = ({ view, user, onLogout }) => {
         return <PurchaseReturn />
       case "settings":
         return <SettingsModule />
+      case "temporary-pos":
+        return <TemporaryPOSPage />
       default:
         if (showCustomerList) {
           const filteredCustomers = getFilteredCustomers()

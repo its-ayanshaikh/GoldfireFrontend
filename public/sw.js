@@ -40,7 +40,14 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - Network first, fallback to cache
 self.addEventListener('fetch', (event) => {
+  // Skip non-GET requests
   if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // Skip chrome-extension and other non-http(s) requests
+  const url = new URL(event.request.url);
+  if (!url.protocol.startsWith('http')) {
     return;
   }
 
@@ -54,7 +61,10 @@ self.addEventListener('fetch', (event) => {
         const responseToCache = response.clone();
         caches.open(CACHE_NAME)
           .then((cache) => {
-            cache.put(event.request, responseToCache);
+            cache.put(event.request, responseToCache).catch((err) => {
+              // Silently fail if cache.put fails (e.g., for opaque responses)
+              console.log('Cache put failed:', err);
+            });
           });
 
         return response;

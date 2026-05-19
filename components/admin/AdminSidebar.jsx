@@ -23,6 +23,7 @@ import {
   ShoppingCart,
   Plus,
   Settings,
+  FileText,
 } from "lucide-react"
 import { useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
@@ -58,7 +59,8 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
       'bills-management': '/admin/bill',
       'vendor-management': '/admin/vendor',
       'branch-management': '/admin/branch',
-      'settings': '/admin/settings'
+      'settings': '/admin/settings',
+      'temporary-pos': '/admin/temporary-pos'
     }
     return routeMap[view] || '/admin/dashboard'
   }
@@ -145,6 +147,14 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
       icon: Receipt,
       onClick: () => {
         handleViewChange("bills-management")
+      },
+    },
+    {
+      id: "temporary-pos",
+      label: "Temporary POS",
+      icon: FileText,
+      onClick: () => {
+        handleViewChange("temporary-pos")
       },
     },
 
@@ -340,7 +350,8 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
                       (item.id === "customers" && currentView === "customer-management") ||
                       (item.id === "bills" && currentView === "bills-management") ||
                       (item.id === "vendors" && currentView === "vendor-management") ||
-                      (item.id === "branches" && currentView === "branch-management")
+                      (item.id === "branches" && currentView === "branch-management") ||
+                      (item.id === "temporary-pos" && currentView === "temporary-pos")
                       ? "secondary"
                       : "ghost"
                   }

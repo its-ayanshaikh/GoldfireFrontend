@@ -6,6 +6,7 @@ import AdminRouter from "../components/admin/AdminRouter"
 import POSRouter from "../components/POSRouter"
 import EmployeeRouter from "../components/employee/EmployeeRouter"
 import SubadminDashboard from "../components/subadmin/SubadminDashboard"
+import TempPOSRouter from "../components/pos/TempPOSRouter"
 import InstallPrompt from "../components/InstallPrompt"
 
 export default function Home() {
@@ -134,8 +135,21 @@ export default function Home() {
   }
 
   console.log('Rendering app for user:', user)
+  console.log('User type detected:', user?.user_type)
+
+  // Check for temp_pos FIRST before other types
+  if (user?.user_type === "temp_pos") {
+    console.log('Rendering TempPOSRouter for temp_pos user')
+    return (
+      <>
+        <InstallPrompt />
+        <TempPOSRouter user={user} onLogout={handleLogout} />
+      </>
+    )
+  }
 
   if (user?.user_type === "admin") {
+    console.log('Rendering AdminRouter for admin user')
     return (
       <>
         <InstallPrompt />
@@ -145,6 +159,7 @@ export default function Home() {
   }
 
   if (user?.user_type === "subadmin") {
+    console.log('Rendering SubadminDashboard for subadmin user')
     return (
       <>
         <InstallPrompt />
@@ -154,6 +169,7 @@ export default function Home() {
   }
 
   if (user?.user_type === "employee") {
+    console.log('Rendering EmployeeRouter for employee user')
     return (
       <>
         <InstallPrompt />
@@ -162,7 +178,8 @@ export default function Home() {
     )
   }
 
-  // For POS users, use POSRouter
+  // For POS users or any other type, use POSRouter
+  console.log('Rendering POSRouter for POS or default user')
   return (
     <>
       <InstallPrompt />

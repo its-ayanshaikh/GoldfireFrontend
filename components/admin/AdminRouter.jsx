@@ -40,7 +40,8 @@ const LegacyRedirectHandler = () => {
         'bills-management': '/admin/bill',
         'vendor-management': '/admin/vendor',
         'branch-management': '/admin/branch',
-        'settings': '/admin/settings'
+        'settings': '/admin/settings',
+        'temporary-pos': '/admin/temporary-pos'
       }
 
       const newRoute = routeMap[view]
@@ -104,6 +105,7 @@ const AdminRouter = ({ user, onLogout }) => {
             <Route path="/admin/vendor" element={<AdminDashboardWrapper view="vendor" user={user} onLogout={onLogout} />} />
             <Route path="/admin/branch" element={<AdminDashboardWrapper view="branch" user={user} onLogout={onLogout} />} />
             <Route path="/admin/settings" element={<AdminDashboardWrapper view="settings" user={user} onLogout={onLogout} />} />
+            <Route path="/admin/temporary-pos" element={<AdminDashboardWrapper view="temporary-pos" user={user} onLogout={onLogout} />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
