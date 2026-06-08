@@ -90,6 +90,13 @@ const TaskManagement = () => {
   const [submissionNextPage, setSubmissionNextPage] = useState(null)
   const [submissionPreviousPage, setSubmissionPreviousPage] = useState(null)
 
+  // Monthly matrix states (rows = employees, columns = dates)
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)) // "YYYY-MM"
+  const [matrixDates, setMatrixDates] = useState([])
+  const [matrixEmployees, setMatrixEmployees] = useState([])
+  const [matrixLoading, setMatrixLoading] = useState(false)
+  const [submissionDetailLoading, setSubmissionDetailLoading] = useState(false)
+
   // Fetch employees from API
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -306,9 +313,14 @@ const TaskManagement = () => {
           taskId: submission.task,
           taskName: submission.task_name,
           employeeName: submission.submitted_by || "Unknown",
-          submissionDate: submission.submitted_at?.split("T")[0] || selectedSubmissionDate,
+          submissionDate: submission.submission_date || submission.submitted_at?.split("T")[0] || selectedSubmissionDate,
+          submittedAt: submission.submitted_at || null,
           photos: submission.images?.map((img) => img.image) || [],
-          status: submission.status === "submitted" ? "completed" : submission.status,
+          // raw status from backend: pending | submitted | verified | rejected
+          rawStatus: submission.status,
+          // "completed" only when the employee actually submitted/verified it
+          status: (submission.status === "submitted" || submission.status === "verified") ? "completed" : submission.status,
+          isDone: submission.status === "submitted" || submission.status === "verified",
           notes: submission.notes || "",
         }))
 
@@ -345,6 +357,49 @@ const TaskManagement = () => {
 
     fetchSubmissions()
   }, [currentSubView, selectedSubmissionDate, submissionStatus, submissionPage, debouncedSubmissionSearchTerm])
+
+  // Fetch monthly matrix (rows = employees, columns = dates)
+  useEffect(() => {
+    if (currentSubView !== "task-submissions") return
+
+    const fetchMatrix = async () => {
+      try {
+        setMatrixLoading(true)
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+        const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
+
+        const params = new URLSearchParams()
+        params.append("month", selectedMonth)
+        if (debouncedSubmissionSearchTerm) {
+          params.append("search", debouncedSubmissionSearchTerm)
+        }
+
+        const response = await fetch(`${baseUrl}/api/task/submissions/matrix/?${params.toString()}`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (!response.ok) throw new Error("Failed to fetch matrix")
+        const data = await response.json()
+
+        setMatrixDates(data.dates || [])
+        setMatrixEmployees(data.employees || [])
+      } catch (err) {
+        console.error("Error fetching matrix:", err)
+        toast({
+          title: "Error",
+          description: "Failed to load monthly submissions",
+          variant: "destructive",
+        })
+      } finally {
+        setMatrixLoading(false)
+      }
+    }
+
+    fetchMatrix()
+  }, [currentSubView, selectedMonth, debouncedSubmissionSearchTerm])
 
   const getFrequencyText = (frequency, customDays, selectedDays = []) => {
     switch (frequency) {
@@ -697,18 +752,111 @@ const TaskManagement = () => {
     { id: "task-list", label: "Task List", icon: List },
   ]
 
+  // Fetch full submission detail (with images) and open dialog
+  const openSubmissionDetail = async (submissionId, fallback = {}) => {
+    setSelectedSubmission({ ...fallback, photos: fallback.photos || [] })
+    setIsSubmissionViewOpen(true)
+
+    if (!submissionId) return
+
+    try {
+      setSubmissionDetailLoading(true)
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+      const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
+
+      const response = await fetch(`${baseUrl}/api/task/submissions/${submissionId}/`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) throw new Error("Failed to fetch submission detail")
+      const data = await response.json()
+
+      setSelectedSubmission({
+        id: data.id,
+        taskName: data.task_name,
+        taskDescription: data.task_description || "",
+        employeeName: data.submitted_by || fallback.employeeName || "Unknown",
+        submissionDate: data.submission_date || fallback.submissionDate,
+        submittedAt: data.submitted_at || null,
+        status: (data.status === "submitted" || data.status === "verified") ? "completed" : data.status,
+        notes: data.notes || "",
+        photos: data.images?.map((img) => img.image) || [],
+      })
+    } catch (err) {
+      console.error("Error fetching submission detail:", err)
+      toast({
+        title: "Error",
+        description: "Failed to load submission details",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmissionDetailLoading(false)
+    }
+  }
+
   const renderTaskSubmissions = () => {
-    // Get today's date
-    const today = new Date().toISOString().split("T")[0]
-    const selectedDate = new Date(selectedSubmissionDate)
-    const todayDate = new Date(today)
-    const isFutureDate = selectedDate > todayDate
+    // Cell render helper: ✓ done, ✗ not done, "-" no task that day for that employee
+    const renderCell = (employee, dateStr) => {
+      const cell = employee.cells?.[dateStr]
+      if (!cell) {
+        return <span className="text-muted-foreground/50 text-sm">—</span>
+      }
+
+      const fallback = {
+        id: cell.submission_id,
+        taskName: cell.task_name,
+        employeeName: employee.employee_name,
+        submissionDate: dateStr,
+        status: cell.done ? "completed" : "pending",
+        photos: [],
+        notes: "",
+      }
+
+      if (cell.done) {
+        return (
+          <button
+            type="button"
+            title={`${cell.task_name || "Task"} — Done`}
+            onClick={() => openSubmissionDetail(cell.submission_id, fallback)}
+            className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-100 text-green-700 hover:bg-green-200"
+          >
+            <CheckCircle className="h-4 w-4" />
+          </button>
+        )
+      }
+      return (
+        <button
+          type="button"
+          title={`${cell.task_name || "Task"} — Not done`}
+          onClick={() => openSubmissionDetail(cell.submission_id, fallback)}
+          className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-100 text-red-700 hover:bg-red-200"
+        >
+          <XCircle className="h-4 w-4" />
+        </button>
+      )
+    }
+
+    const formatDateHeader = (dateStr) => {
+      const d = new Date(dateStr)
+      return {
+        day: d.toLocaleDateString("en-IN", { day: "2-digit" }),
+        weekday: d.toLocaleDateString("en-IN", { weekday: "short" }),
+      }
+    }
+
+    const monthLabel = (() => {
+      const [y, m] = selectedMonth.split("-").map(Number)
+      return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" })
+    })()
 
     return (
       <div className="space-y-6">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-foreground">Task Submissions</h2>
-          <p className="text-muted-foreground">View submitted tasks by employees</p>
+          <p className="text-muted-foreground">Monthly overview — dates on top, employees on the side</p>
         </div>
 
         <Card>
@@ -718,29 +866,16 @@ const TaskManagement = () => {
               <CardTitle>Filters</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="submission-date">Select Date:</Label>
+                <Label htmlFor="submission-month">Select Month:</Label>
                 <Input
-                  type="date"
-                  value={selectedSubmissionDate}
-                  onChange={(e) => {
-                    const newDate = e.target.value
-                    const selectedDate = new Date(newDate)
-                    const todayDate = new Date(today)
-                    if (selectedDate <= todayDate) {
-                      setSelectedSubmissionDate(newDate)
-                      setSubmissionPage(1)
-                    } else {
-                      toast({
-                        title: "Invalid Date",
-                        description: "You cannot select a future date",
-                        variant: "destructive",
-                      })
-                    }
-                  }}
-                  max={today}
+                  id="submission-month"
+                  type="month"
+                  value={selectedMonth}
+                  max={new Date().toISOString().slice(0, 7)}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
                   className="w-full"
                 />
               </div>
@@ -748,36 +883,12 @@ const TaskManagement = () => {
                 <Label htmlFor="submission-search">Search:</Label>
                 <Input
                   id="submission-search"
-                  placeholder="Search by task name..."
+                  placeholder="Search by task or employee name..."
                   value={submissionSearchTerm}
-                  onChange={(e) => {
-                    setSubmissionSearchTerm(e.target.value)
-                    setSubmissionPage(1)
-                  }}
+                  onChange={(e) => setSubmissionSearchTerm(e.target.value)}
                 />
               </div>
-              <div>
-                <Label htmlFor="submission-status">Status:</Label>
-                <Select value={submissionStatus} onValueChange={(value) => {
-                  setSubmissionStatus(value)
-                  setSubmissionPage(1)
-                }}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="submitted">Submitted</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
-            {isFutureDate && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-orange-800 text-sm">
-                ⚠️ Future dates are not allowed. Showing data for today instead.
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -787,107 +898,72 @@ const TaskManagement = () => {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-5 w-5" />
-                  Submissions
+                  {monthLabel}
                 </CardTitle>
-                <CardDescription>Showing {taskSubmissions.length} of {submissionTotalCount} submissions</CardDescription>
+                <CardDescription>
+                  {matrixEmployees.length} employees • {matrixDates.length} task dates
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <CheckCircle className="h-4 w-4 text-green-600" /> Done
+                </span>
+                <span className="flex items-center gap-1">
+                  <XCircle className="h-4 w-4 text-red-600" /> Not done
+                </span>
+                <span className="flex items-center gap-1">— No task</span>
               </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {submissionLoading ? (
+            {matrixLoading ? (
               <div className="p-8 text-center">
                 <Loader className="w-8 h-8 animate-spin mx-auto mb-2 text-muted-foreground" />
-                <p className="text-muted-foreground">Loading submissions...</p>
+                <p className="text-muted-foreground">Loading monthly submissions...</p>
               </div>
-            ) : taskSubmissions.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">No submissions found</div>
+            ) : matrixDates.length === 0 ? (
+              <div className="p-12 text-center">
+                <Calendar className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                <p className="font-medium text-foreground">No tasks this month</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  No task submissions were created for {monthLabel}.
+                </p>
+              </div>
             ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left p-4 font-medium text-foreground">Task</th>
-                        <th className="text-left p-4 font-medium text-foreground">Employee</th>
-                        <th className="text-center p-4 font-medium text-foreground">Status</th>
-                        <th className="text-center p-4 font-medium text-foreground">Photos</th>
-                        <th className="text-center p-4 font-medium text-foreground">Action</th>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      <th className="text-left p-3 font-medium text-foreground sticky left-0 bg-muted z-20 min-w-[140px] shadow-[2px_0_4px_rgba(0,0,0,0.06)]">
+                        Employee
+                      </th>
+                      {matrixDates.map((dateStr) => {
+                        const { day, weekday } = formatDateHeader(dateStr)
+                        return (
+                          <th key={dateStr} className="p-2 font-medium text-foreground text-center min-w-[52px]">
+                            <div className="text-base leading-none">{day}</div>
+                            <div className="text-[10px] text-muted-foreground uppercase">{weekday}</div>
+                          </th>
+                        )
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matrixEmployees.map((employee) => (
+                      <tr key={employee.employee_id} className="border-b border-border hover:bg-accent">
+                        <td className="p-3 font-medium text-foreground sticky left-0 bg-white z-10 min-w-[140px] shadow-[2px_0_4px_rgba(0,0,0,0.06)]">
+                          {employee.employee_name}
+                        </td>
+                        {matrixDates.map((dateStr) => (
+                          <td key={dateStr} className="p-2 text-center">
+                            {renderCell(employee, dateStr)}
+                          </td>
+                        ))}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {taskSubmissions.map((submission) => (
-                        <tr key={submission.id} className="border-b border-border hover:bg-accent">
-                          <td className="p-4">
-                            <div className="font-medium text-foreground">{submission.taskName}</div>
-                          </td>
-                          <td className="p-4">
-                            <div className="font-medium text-foreground">{submission.employeeName}</div>
-                          </td>
-                          <td className="p-4 text-center">{getStatusBadge(submission.status)}</td>
-                          <td className="p-4 text-center">
-                            {submission.photos.length > 0 ? (
-                              <div className="flex items-center justify-center gap-1">
-                                <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm text-muted-foreground">{submission.photos.length}</span>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-muted-foreground">No photos</span>
-                            )}
-                          </td>
-                          <td className="p-4 text-center">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedSubmission(submission)
-                                setIsSubmissionViewOpen(true)
-                              }}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Pagination Controls */}
-                {taskSubmissions.length > 0 && (
-                  <div className="flex items-center justify-between p-4 border-t">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {taskSubmissions.length} submissions • Total {submissionTotalCount}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSubmissionPage(submissionPage - 1)}
-                        disabled={!submissionPreviousPage}
-                        className="flex items-center gap-1"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                        Previous
-                      </Button>
-
-                      <div className="px-3 py-1 bg-gray-100 rounded text-sm font-medium">
-                        {submissionPage}
-                      </div>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSubmissionPage(submissionPage + 1)}
-                        disabled={!submissionNextPage}
-                        className="flex items-center gap-1"
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -1547,6 +1623,12 @@ const TaskManagement = () => {
           </DialogHeader>
           {selectedSubmission && (
             <div className="space-y-4">
+              {submissionDetailLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader className="h-4 w-4 animate-spin" />
+                  Loading details...
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Task Name</Label>
@@ -1559,12 +1641,14 @@ const TaskManagement = () => {
                 <div>
                   <Label>Submission Date</Label>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {new Date(selectedSubmission.submissionDate).toLocaleDateString("en-IN", {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
+                    {selectedSubmission.submissionDate
+                      ? new Date(selectedSubmission.submissionDate).toLocaleDateString("en-IN", {
+                          weekday: "long",
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })
+                      : "-"}
                   </p>
                 </div>
                 <div>
@@ -1572,13 +1656,21 @@ const TaskManagement = () => {
                   <div className="mt-1">{getStatusBadge(selectedSubmission.status)}</div>
                 </div>
               </div>
+              {selectedSubmission.taskDescription && (
+                <div>
+                  <Label>Task Description</Label>
+                  <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted rounded-md whitespace-pre-wrap">
+                    {selectedSubmission.taskDescription}
+                  </p>
+                </div>
+              )}
               <div>
                 <Label>Notes</Label>
                 <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted rounded-md">
                   {selectedSubmission.notes || "No notes provided"}
                 </p>
               </div>
-              {selectedSubmission.photos && selectedSubmission.photos.length > 0 && (
+              {selectedSubmission.photos && selectedSubmission.photos.length > 0 ? (
                 <div>
                   <Label>Submitted Photos ({selectedSubmission.photos.length})</Label>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
@@ -1601,6 +1693,12 @@ const TaskManagement = () => {
                     })}
                   </div>
                 </div>
+              ) : (
+                !submissionDetailLoading && (
+                  <div className="text-sm text-muted-foreground p-3 bg-muted rounded-md">
+                    No photos submitted for this task.
+                  </div>
+                )
               )}
             </div>
           )}

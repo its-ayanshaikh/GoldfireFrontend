@@ -222,6 +222,26 @@ export default function ProductList() {
 
   const totalQty = (p) => p.quantities?.reduce((sum, q) => sum + Number(q.qty || 0), 0) || 0
 
+  // Resolve the selling price to display next to the product name.
+  // For variant products, derive the price from the variants (show range if they differ).
+  const getDisplayPrice = (p) => {
+    if (p.is_variant && Array.isArray(p.variants) && p.variants.length > 0) {
+      const prices = p.variants
+        .map((v) => Number(v.selling_price))
+        .filter((n) => !Number.isNaN(n) && n > 0)
+
+      if (prices.length === 0) return null
+
+      const min = Math.min(...prices)
+      const max = Math.max(...prices)
+
+      return min === max ? currency(min) : `${currency(min)} - ${currency(max)}`
+    }
+
+    const price = Number(p.selling_price)
+    return !Number.isNaN(price) && price > 0 ? currency(price) : null
+  }
+
   // Pagination handlers
   const handleNextPage = () => {
     if (nextPageUrl) {
@@ -432,6 +452,11 @@ export default function ProductList() {
                               : p.name
                             }
                           </div>
+                          {getDisplayPrice(p) && (
+                            <div className="text-sm font-semibold text-primary">
+                              {getDisplayPrice(p)}
+                            </div>
+                          )}
                           <div className="text-xs text-muted-foreground">
                             Category: {p.category_name || "-"}
                           </div>
