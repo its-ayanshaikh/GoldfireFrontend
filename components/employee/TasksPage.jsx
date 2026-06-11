@@ -1,154 +1,202 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import TaskCard from "./TaskCard"
-import { CheckSquare, Search, Loader2, ClipboardList, X } from "lucide-react"
+import {
+  CheckSquare,
+  Loader2,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle,
+  XCircle,
+  CalendarDays,
+} from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
-import { Input } from "../ui/input"
+import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog"
 import { useToast } from "../../hooks/use-toast"
 
-const TasksPage = () => {
-  const [tasks, setTasks] = useState([])
-  const [submittedTasks, setSubmittedTasks] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [selectedPhoto, setSelectedPhoto] = useState(null)
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-  const [searchTerm, setSearchTerm] = useState("")
-  const [searchLoading, setSearchLoading] = useState(false)
+const TasksPage = () => {
   const { toast } = useToast()
 
-  // Fetch tasks from API
+  // Today's pending tasks (for submitting)
+  const [todayTasks, setTodayTasks] = useState([])
+  const [todayLoading, setTodayLoading] = useState(true)
+
+  // Calendar state
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)) // "YYYY-MM"
+  const [calendarDays, setCalendarDays] = useState({})
+  const [todayStr, setTodayStr] = useState(new Date().toISOString().split("T")[0])
+  const [calendarLoading, setCalendarLoading] = useState(true)
+
+  // Day dialog
+  const [selectedDay, setSelectedDay] = useState(null) // { dateStr, tasks }
+  const [selectedPhoto, setSelectedPhoto] = useState(null)
+
+  // -------- Fetch today's pending tasks (for submit) --------
+  const fetchTodayTasks = useCallback(async () => {
+    try {
+      setTodayLoading(true)
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+      const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
+
+      const response = await fetch(`${baseUrl}/api/task/employee-task/`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) throw new Error("Failed to fetch tasks")
+      const data = await response.json()
+
+      let taskList = []
+      if (Array.isArray(data)) taskList = data
+      else if (data.results) taskList = Array.isArray(data.results) ? data.results : [data.results]
+      else if (data.data) taskList = Array.isArray(data.data) ? data.data : [data.data]
+      else if (data.tasks) taskList = Array.isArray(data.tasks) ? data.tasks : [data.tasks]
+
+      const formatted = taskList.map((task) => ({
+        id: task.id,
+        title: task.task_name,
+        description: task.description || "",
+        status: "pending",
+        photos: [],
+        priority: "medium",
+      }))
+
+      setTodayTasks(formatted)
+    } catch (err) {
+      console.error("Error fetching today's tasks:", err)
+    } finally {
+      setTodayLoading(false)
+    }
+  }, [])
+
+  // -------- Fetch month calendar --------
+  const fetchCalendar = useCallback(async () => {
+    try {
+      setCalendarLoading(true)
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+      const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
+
+      const response = await fetch(
+        `${baseUrl}/api/task/my-submissions/calendar/?month=${selectedMonth}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      )
+
+      if (!response.ok) throw new Error("Failed to fetch calendar")
+      const data = await response.json()
+
+      setCalendarDays(data.days || {})
+      if (data.today) setTodayStr(data.today)
+    } catch (err) {
+      console.error("Error fetching calendar:", err)
+      toast({
+        title: "Error",
+        description: "Failed to load task calendar",
+        variant: "destructive",
+      })
+    } finally {
+      setCalendarLoading(false)
+    }
+  }, [selectedMonth, toast])
+
   useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        setLoading(true)
-        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
-        const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
+    fetchTodayTasks()
+  }, [fetchTodayTasks])
 
-        // Fetch pending tasks
-        const response = await fetch(`${baseUrl}/api/task/employee-task/`, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        })
+  useEffect(() => {
+    fetchCalendar()
+  }, [fetchCalendar])
 
-        if (!response.ok) throw new Error("Failed to fetch tasks")
-        const data = await response.json()
+  // After submitting a task, refresh both today's tasks and calendar
+  const handleTaskSubmitted = () => {
+    fetchTodayTasks()
+    fetchCalendar()
+  }
 
-        // Handle both array and object responses
-        let taskList = []
-        if (Array.isArray(data)) {
-          taskList = data
-        } else if (data.results) {
-          taskList = Array.isArray(data.results) ? data.results : [data.results]
-        } else if (data.data) {
-          taskList = Array.isArray(data.data) ? data.data : [data.data]
-        } else if (data.tasks) {
-          taskList = Array.isArray(data.tasks) ? data.tasks : [data.tasks]
-        }
+  // -------- Build calendar grid --------
+  const [year, month] = selectedMonth.split("-").map(Number)
+  const firstDay = new Date(year, month - 1, 1)
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const startWeekday = firstDay.getDay() // 0 = Sun
 
-        // Map API response to component format
-        const formattedTasks = taskList.map((task) => ({
-          id: task.id,
-          title: task.task_name,
-          description: task.description || "",
-          status: task.status === "pending" ? "pending" : "complete",
-          photos: [],
-          priority: "medium",
-        }))
+  const cells = []
+  for (let i = 0; i < startWeekday; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+    cells.push({ day: d, dateStr })
+  }
 
-        setTasks(formattedTasks)
+  const monthLabel = firstDay.toLocaleDateString("en-IN", { month: "long", year: "numeric" })
 
-        // Fetch submitted tasks
-        const submittedResponse = await fetch(`${baseUrl}/api/task/submitted-tasks/`, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        })
+  const goPrevMonth = () => {
+    const prev = new Date(year, month - 2, 1)
+    setSelectedMonth(prev.toISOString().slice(0, 7))
+  }
+  const goNextMonth = () => {
+    const next = new Date(year, month, 1)
+    const nextStr = next.toISOString().slice(0, 7)
+    if (nextStr <= new Date().toISOString().slice(0, 7)) {
+      setSelectedMonth(nextStr)
+    }
+  }
 
-        if (submittedResponse.ok) {
-          const submittedData = await submittedResponse.json()
+  const isNextDisabled = selectedMonth >= new Date().toISOString().slice(0, 7)
 
-          // Handle both array and object responses
-          let submittedList = []
-          if (Array.isArray(submittedData)) {
-            submittedList = submittedData
-          } else if (submittedData.results) {
-            submittedList = Array.isArray(submittedData.results) ? submittedData.results : [submittedData.results]
-          } else if (submittedData.data) {
-            submittedList = Array.isArray(submittedData.data) ? submittedData.data : [submittedData.data]
-          }
+  // returns color classes for a date cell
+  const getCellStyle = (dateStr) => {
+    const dayData = calendarDays[dateStr]
+    const isToday = dateStr === todayStr
 
-          // Map submitted tasks response
-          const formattedSubmitted = submittedList.map((submission) => ({
-            id: submission.id,
-            taskId: submission.task,
-            title: submission.task_name,
-            description: submission.task_description || "",
-            status: "complete",
-            notes: submission.notes || "",
-            submittedAt: submission.submitted_at,
-            photos: submission.images?.map((img) => `${baseUrl}${img.image}`) || [],
-            priority: "medium",
-          }))
-
-          setSubmittedTasks(formattedSubmitted)
-        }
-      } catch (err) {
-        console.error("Error fetching tasks:", err)
-        toast({
-          title: "Error",
-          description: "Failed to load tasks",
-          variant: "destructive",
-        })
-      } finally {
-        setLoading(false)
+    if (!dayData) {
+      // no task this day
+      return {
+        className: "bg-muted/30 text-muted-foreground border-transparent",
+        label: "—",
+        clickable: false,
       }
     }
 
-    fetchTasks()
-  }, [])
-
-  const updateTaskStatus = (taskId, status, photos = []) => {
-    setTasks(
-      tasks.map((task) => (task.id === taskId ? { ...task, status, photos: [...task.photos, ...photos] } : task)),
-    )
-  }
-
-  const handleSearch = (term) => {
-    setSearchLoading(true)
-    setSearchTerm(term)
-
-    // Simulate search delay
-    setTimeout(() => {
-      setSearchLoading(false)
-      if (term) {
-        toast({
-          title: "Search Complete",
-          description: `Found ${filteredTasks.length} tasks matching "${term}"`,
-          className: "bg-green-50 border-green-200 text-green-800",
-        })
+    if (dayData.all_done) {
+      return {
+        className: "bg-green-100 text-green-800 border-green-300 hover:bg-green-200",
+        label: null,
+        clickable: true,
       }
-    }, 500)
+    }
+
+    // any pending → red
+    return {
+      className: "bg-red-100 text-red-800 border-red-300 hover:bg-red-200",
+      label: null,
+      clickable: true,
+    }
   }
 
-  const filteredTasks = tasks.filter(
-    (task) =>
-      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.description.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  const openDay = (dateStr) => {
+    const dayData = calendarDays[dateStr]
+    if (!dayData) return
+    setSelectedDay({ dateStr, tasks: dayData.tasks || [] })
+  }
 
-  const filteredSubmittedTasks = submittedTasks.filter(
-    (task) =>
-      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.description.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
-
-  const pendingTasks = filteredTasks.filter((task) => task.status === "pending")
-  const completedTasks = filteredTasks.filter((task) => task.status === "complete")
+  // tasks that can be submitted today (pending) — matched from todayTasks
+  const submittablePendingForToday = (dayTasks) => {
+    return dayTasks
+      .filter((t) => !t.done)
+      .map((t) => todayTasks.find((tt) => tt.id === t.task_id))
+      .filter(Boolean)
+  }
 
   return (
     <div className="h-full bg-background flex flex-col overflow-hidden">
@@ -156,167 +204,199 @@ const TasksPage = () => {
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">My Tasks</h1>
-          <p className="text-muted-foreground">View and manage your assigned tasks</p>
+          <p className="text-muted-foreground">Your monthly task overview — tap a date to view or submit</p>
         </div>
 
-        {/* Search Card */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                {searchLoading ? (
-                  <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
-                ) : (
-                  <Search className="w-5 h-5 text-muted-foreground" />
-                )}
+        {/* Today's pending tasks (quick submit) */}
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="w-5 h-5 text-orange-500" />
+              Today's Tasks
+              {!todayLoading && <Badge variant="secondary">{todayTasks.length}</Badge>}
+            </CardTitle>
+            <CardDescription>Tasks you need to submit today</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {todayLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading...
               </div>
-              <Input
-                type="text"
-                placeholder="Search tasks..."
-                value={searchTerm}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="pl-10 h-12"
-              />
-            </div>
+            ) : todayTasks.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <CheckSquare className="w-10 h-10 mx-auto mb-2" />
+                No pending tasks for today. You're all caught up!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {todayTasks.map((task) => (
+                  <TaskCard key={task.id} task={task} onUpdateStatus={handleTaskSubmitted} />
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Pending Tasks */}
-        {pendingTasks.length > 0 && (
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader>
+        {/* Monthly calendar */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <CardTitle className="flex items-center gap-2">
-                <ClipboardList className="w-5 h-5 text-orange-500" />
-                Pending Tasks
-                <Badge variant="secondary">{pendingTasks.length}</Badge>
+                <CalendarDays className="w-5 h-5" />
+                {monthLabel}
               </CardTitle>
-              <CardDescription>Tasks that need your attention</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {pendingTasks.map((task) => (
-                  <TaskCard key={task.id} task={task} onUpdateStatus={updateTaskStatus} />
-                ))}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={goPrevMonth}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={goNextMonth} disabled={isNextDisabled}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+            {/* Legend */}
+            <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-green-300 inline-block" /> Submitted
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-red-300 inline-block" /> Not submitted
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-muted inline-block" /> No task
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {calendarLoading ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading calendar...
+              </div>
+            ) : (
+              <div className="grid grid-cols-7 gap-1.5 md:gap-2">
+                {WEEKDAYS.map((wd) => (
+                  <div key={wd} className="text-center text-xs font-medium text-muted-foreground py-1">
+                    {wd}
+                  </div>
+                ))}
+                {cells.map((cell, idx) => {
+                  if (!cell) return <div key={`empty-${idx}`} />
 
-        {/* Submitted Tasks */}
-        {filteredSubmittedTasks.length > 0 && (
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckSquare className="w-5 h-5 text-green-500" />
-                Submitted Tasks
-                <Badge variant="secondary">{filteredSubmittedTasks.length}</Badge>
-              </CardTitle>
-              <CardDescription>Tasks you have submitted</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredSubmittedTasks.map((task) => (
-                  <Card key={task.id} className="hover:shadow-lg transition-all">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <CheckSquare className="w-4 h-4 text-green-600" />
-                        {task.title}
-                      </CardTitle>
-                      <CardDescription className="mt-2">{task.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {task.notes && (
-                        <div>
-                          <p className="text-sm font-medium text-foreground">Notes</p>
-                          <p className="text-sm text-muted-foreground mt-1">{task.notes}</p>
-                        </div>
+                  const style = getCellStyle(cell.dateStr)
+                  const isToday = cell.dateStr === todayStr
+                  const dayData = calendarDays[cell.dateStr]
+
+                  return (
+                    <button
+                      key={cell.dateStr}
+                      type="button"
+                      disabled={!style.clickable}
+                      onClick={() => openDay(cell.dateStr)}
+                      className={`relative aspect-square rounded-lg border flex flex-col items-center justify-center text-sm font-semibold transition-colors ${style.className} ${
+                        isToday ? "ring-2 ring-primary ring-offset-1" : ""
+                      } ${style.clickable ? "cursor-pointer" : "cursor-default"}`}
+                    >
+                      <span>{cell.day}</span>
+                      {dayData && (
+                        <span className="mt-0.5">
+                          {dayData.all_done ? (
+                            <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                          ) : (
+                            <XCircle className="w-3.5 h-3.5 text-red-600" />
+                          )}
+                        </span>
                       )}
-                      {task.photos.length > 0 && (
-                        <div>
-                          <p className="text-sm font-medium text-foreground mb-2">Photos ({task.photos.length})</p>
-                          <div className="flex gap-2 overflow-x-auto">
-                            {task.photos.map((photo, index) => (
-                              <img
-                                key={index}
-                                src={photo}
-                                alt={`Submitted ${index + 1}`}
-                                onClick={() => setSelectedPhoto(photo)}
-                                className="w-12 h-12 rounded-lg object-cover border border-border flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div className="text-xs text-muted-foreground pt-2 border-t">
-                        Submitted: {new Date(task.submittedAt).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                    </button>
+                  )
+                })}
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Completed Tasks */}
-        {completedTasks.length > 0 && (
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckSquare className="w-5 h-5 text-green-500" />
-                Completed Tasks
-                <Badge variant="secondary">{completedTasks.length}</Badge>
-              </CardTitle>
-              <CardDescription>Successfully completed tasks</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {completedTasks.map((task) => (
-                  <TaskCard key={task.id} task={task} onUpdateStatus={updateTaskStatus} />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Loader2 className="w-16 h-16 text-muted-foreground mx-auto mb-4 animate-spin" />
-              <CardTitle className="mb-2">Loading tasks...</CardTitle>
-              <p className="text-muted-foreground">Please wait while we fetch your tasks</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Empty States */}
-        {!loading && filteredTasks.length === 0 && searchTerm && (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Search className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <CardTitle className="mb-2">No tasks found</CardTitle>
-              <p className="text-muted-foreground">Try adjusting your search terms</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {!loading && tasks.length === 0 && (
-          <Card>
-            <CardContent className="text-center py-12">
-              <CheckSquare className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <CardTitle className="mb-2">No tasks yet</CardTitle>
-              <p className="text-muted-foreground">Tasks will appear here when assigned to you</p>
-            </CardContent>
-          </Card>
-        )}
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Day Detail Dialog */}
+      <Dialog open={!!selectedDay} onOpenChange={(open) => !open && setSelectedDay(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedDay &&
+                new Date(selectedDay.dateStr).toLocaleDateString("en-IN", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+            </DialogTitle>
+            <DialogDescription>Tasks for this day</DialogDescription>
+          </DialogHeader>
+
+          {selectedDay && (
+            <div className="space-y-4">
+              {/* Task status list */}
+              <div className="space-y-2">
+                {selectedDay.tasks.map((t) => (
+                  <div
+                    key={t.submission_id}
+                    className="flex items-start gap-3 p-3 rounded-lg border border-border"
+                  >
+                    <div className="mt-0.5">
+                      {t.done ? (
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-red-600" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-foreground">{t.task_name}</div>
+                      {t.task_description && (
+                        <div className="text-sm text-muted-foreground mt-0.5">{t.task_description}</div>
+                      )}
+                      <Badge
+                        variant="secondary"
+                        className={`mt-1 ${
+                          t.done ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {t.done ? "Submitted" : "Not submitted"}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* If this is today, allow submitting pending tasks */}
+              {selectedDay.dateStr === todayStr && (
+                <>
+                  {submittablePendingForToday(selectedDay.tasks).length > 0 ? (
+                    <div className="pt-2 border-t border-border space-y-4">
+                      <p className="text-sm font-medium text-foreground">Submit pending tasks</p>
+                      <div className="grid grid-cols-1 gap-4">
+                        {submittablePendingForToday(selectedDay.tasks).map((task) => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            onUpdateStatus={() => {
+                              handleTaskSubmitted()
+                              setSelectedDay(null)
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    selectedDay.tasks.some((t) => !t.done) && (
+                      <div className="text-sm text-muted-foreground p-3 bg-muted rounded-md">
+                        Pending tasks can be submitted from the "Today's Tasks" section above.
+                      </div>
+                    )
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Photo Modal */}
       {selectedPhoto && (
@@ -328,11 +408,7 @@ const TasksPage = () => {
             >
               <X className="w-8 h-8" />
             </button>
-            <img
-              src={selectedPhoto}
-              alt="Full view"
-              className="w-full h-full object-contain rounded-lg"
-            />
+            <img src={selectedPhoto} alt="Full view" className="w-full h-full object-contain rounded-lg" />
           </div>
         </div>
       )}
