@@ -64,6 +64,7 @@ export default function PurchaseAdd() {
   // Item form state
   const [itemForm, setItemForm] = useState({
     product: "",
+    selectedProductObj: null, // full selected product object (search se independent)
     variant: "",
     serialNumbers: [], // Multiple serial numbers
     currentSerial: "", // Current input field
@@ -386,15 +387,17 @@ export default function PurchaseAdd() {
   }, [productSearchDebounced])
 
   const handleProductChange = (productId) => {
+    const selectedProduct = products.find(p => p.id.toString() === productId)
+
     setItemForm(prev => ({
       ...prev,
       product: productId,
+      selectedProductObj: selectedProduct || prev.selectedProductObj,
       variant: "",
       serialNumbers: [],
       currentSerial: ""
     }))
-    
-    const selectedProduct = products.find(p => p.id.toString() === productId)
+
     if (selectedProduct?.is_variants) {
       fetchVariants(productId)
     } else {
@@ -573,7 +576,7 @@ export default function PurchaseAdd() {
       return
     }
 
-    const selectedProduct = products.find(p => p.id.toString() === itemForm.product)
+    const selectedProduct = itemForm.selectedProductObj || products.find(p => p.id.toString() === itemForm.product)
     
     // Check serial numbers if warranty item
     if (selectedProduct?.is_warranty_item && itemForm.serialNumbers.length === 0) {
@@ -600,6 +603,8 @@ export default function PurchaseAdd() {
       id: editingItemIndex !== null ? purchaseItems[editingItemIndex].id : Date.now(),
       productId: itemForm.product,
       productName: selectedProduct?.name,
+      isWarrantyItem: !!selectedProduct?.is_warranty_item,
+      isVariants: !!selectedProduct?.is_variants,
       variantId: itemForm.variant && itemForm.variant !== "" ? itemForm.variant : null,
       variantName: itemForm.variant && itemForm.variant !== "" ? variants.find(v => v.id.toString() === itemForm.variant)?.name : null,
       serialNumbers: [...itemForm.serialNumbers],
@@ -635,6 +640,7 @@ export default function PurchaseAdd() {
     })
     setItemForm({
       product: "",
+      selectedProductObj: null,
       variant: "",
       serialNumbers: [],
       currentSerial: "",
@@ -659,6 +665,7 @@ export default function PurchaseAdd() {
     })
     setItemForm({
       product: "",
+      selectedProductObj: null,
       variant: "",
       serialNumbers: [],
       currentSerial: "",
@@ -685,8 +692,17 @@ export default function PurchaseAdd() {
     console.log('Editing item:', item)
     
     // Populate form with item data
+    const editSelectedProduct =
+      products.find(p => p.id.toString() === (item.productId || item.product)?.toString()) || {
+        id: item.productId || item.product,
+        name: item.productName,
+        is_warranty_item: item.isWarrantyItem ?? (Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0),
+        is_variants: item.isVariants ?? !!item.variantId,
+      }
+
     setItemForm({
       product: item.productId || item.product,
+      selectedProductObj: editSelectedProduct,
       variant: item.variantId || item.variant || "",
       serialNumbers: item.serialNumbers || [],
       currentSerial: "",
@@ -696,9 +712,8 @@ export default function PurchaseAdd() {
     })
     
     // Set product search to show selected product
-    const selectedProduct = products.find(p => p.id.toString() === (item.productId || item.product))
+    const selectedProduct = editSelectedProduct
     if (selectedProduct) {
-      setProductSearch(selectedProduct.name)
       // Load variants if product has variants
       if (selectedProduct.is_variants) {
         fetchVariants(selectedProduct.id)
@@ -1679,7 +1694,7 @@ export default function PurchaseAdd() {
                   >
                     <span className={itemForm.product ? "" : "text-muted-foreground"}>
                       {itemForm.product 
-                        ? products.find(p => p.id.toString() === itemForm.product)?.name 
+                        ? (itemForm.selectedProductObj?.name || products.find(p => p.id.toString() === itemForm.product)?.name)
                         : (isLoadingProducts ? "Loading..." : "Select product")}
                     </span>
                     <span className="text-muted-foreground">▼</span>
@@ -1742,7 +1757,7 @@ export default function PurchaseAdd() {
               </div>
 
               {/* Custom Variant Dropdown - Show only if product has variants */}
-              {itemForm.product && products.find(p => p.id.toString() === itemForm.product)?.is_variants && (
+              {itemForm.product && (itemForm.selectedProductObj?.is_variants ?? products.find(p => p.id.toString() === itemForm.product)?.is_variants) && (
                 <div className="space-y-2">
                   <Label htmlFor="variant">Variant *</Label>
                   <div className="relative" ref={variantDropdownRef}>
@@ -1811,7 +1826,7 @@ export default function PurchaseAdd() {
             </div>
 
             {/* Serial Numbers - Multiple inputs for warranty items */}
-            {itemForm.product && products.find(p => p.id.toString() === itemForm.product)?.is_warranty_item && (
+            {itemForm.product && (itemForm.selectedProductObj?.is_warranty_item ?? products.find(p => p.id.toString() === itemForm.product)?.is_warranty_item) && (
               <div className="space-y-2">
                 <Label>Serial Numbers * (Scan & Press Enter)</Label>
                 <Input
