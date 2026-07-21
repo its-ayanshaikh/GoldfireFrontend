@@ -51,6 +51,12 @@ const EnhancedAttendanceSystem = () => {
   const [selectedImage, setSelectedImage] = useState(null)
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
 
+  // Late attendance review state
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false)
+  const [rejectTarget, setRejectTarget] = useState(null) // employee being rejected
+  const [penaltyInput, setPenaltyInput] = useState("")
+  const [reviewingId, setReviewingId] = useState(null) // employeeId currently processing
+
   // Debug: Log state changes
   useEffect(() => {
     console.log('State changed - isImageModalOpen:', isImageModalOpen)
@@ -155,7 +161,10 @@ const EnhancedAttendanceSystem = () => {
         checkInTime: employee.check_in_time || null, // Add check_in_time from API
         checkInImage: employee.check_in_image || null, // Add check_in_image from API
         checkOutImage: employee.check_out_image || null, // Add check_out_image from API
-        isLate: employee.is_late || false
+        isLate: employee.is_late || false,
+        lateStatus: employee.late_status || null,
+        penaltyAmount: parseFloat(employee.penalty_amount || 0),
+        todayAttendanceId: employee.today_attendance_id || null
       }))
 
       setEmployees(transformedData)
@@ -184,6 +193,71 @@ const EnhancedAttendanceSystem = () => {
   useEffect(() => {
     fetchEmployeesData()
   }, [debouncedSearchTerm, filterBranch, currentPage])
+
+  // -----------------------------
+  // Late attendance review (approve / reject with penalty)
+  // -----------------------------
+  const reviewLateAttendance = async (employee, action, penalty = 0) => {
+    if (!employee?.todayAttendanceId) {
+      toast({ title: "No attendance record", description: "Today's attendance not found for this employee.", variant: "destructive" })
+      return
+    }
+    try {
+      setReviewingId(employee.id)
+      const token = localStorage.getItem("access_token")
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/employee/attendance/${employee.todayAttendanceId}/review-late/`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ action, penalty }),
+        }
+      )
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update late request")
+      }
+
+      // Update local state for that employee
+      setEmployees(prev => prev.map(e =>
+        e.id === employee.id
+          ? { ...e, lateStatus: action === 'approve' ? 'approved' : 'rejected', penaltyAmount: action === 'approve' ? 0 : parseFloat(penalty || 0) }
+          : e
+      ))
+
+      toast({
+        title: action === 'approve' ? "Late request approved" : "Late request rejected",
+        description: action === 'approve'
+          ? `${employee.name}'s late attendance approved.`
+          : `₹${parseFloat(penalty || 0).toLocaleString('en-IN')} penalty deducted from ${employee.name}'s salary.`,
+      })
+    } catch (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } finally {
+      setReviewingId(null)
+    }
+  }
+
+  const openRejectDialog = (employee) => {
+    setRejectTarget(employee)
+    setPenaltyInput("")
+    setIsRejectDialogOpen(true)
+  }
+
+  const confirmReject = async () => {
+    const penalty = parseFloat(penaltyInput || 0)
+    if (isNaN(penalty) || penalty < 0) {
+      toast({ title: "Invalid penalty", description: "Please enter a valid amount.", variant: "destructive" })
+      return
+    }
+    await reviewLateAttendance(rejectTarget, 'reject', penalty)
+    setIsRejectDialogOpen(false)
+    setRejectTarget(null)
+    setPenaltyInput("")
+  }
 
   // API function to fetch branches
   const fetchBranches = async () => {
@@ -297,6 +371,7 @@ const EnhancedAttendanceSystem = () => {
           totalHours: record.total_hours || 0,
           overtimeHours: record.overtime_hours || 0,
           breakHours: record.break_hours || 0,
+          isLate: record.is_late || false,
           originalLoginTime: record.login_time,
           originalLogoutTime: record.logout_time
         }
@@ -573,6 +648,24 @@ const EnhancedAttendanceSystem = () => {
 
   // Backend already filters, just use employees directly
   const filteredEmployees = employees
+
+  // Pagination is driven by the backend (page_size = 20), so total pages
+  // comes from the count returned by the API, not a client-side slice.
+  const totalPages = Math.max(1, Math.ceil(totalCount / 20))
+
+  const getPageNumbers = () => {
+    const maxButtons = 5
+    if (totalPages <= maxButtons) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1)
+    }
+    let start = Math.max(1, currentPage - 2)
+    let end = start + maxButtons - 1
+    if (end > totalPages) {
+      end = totalPages
+      start = end - maxButtons + 1
+    }
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  }
 
   // Helper function to extract time from ISO string (HH:MM:SS format)
   const extractTimeFromISO = (isoString) => {
@@ -859,13 +952,40 @@ const EnhancedAttendanceSystem = () => {
                         
                         {employee.isLate && (
                           <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">Late Request</Badge>
-                            <Button variant="outline" size="sm" className="h-8 px-3 text-xs">
-                              Approve
-                            </Button>
-                            <Button variant="outline" size="sm" className="h-8 px-3 text-xs text-destructive">
-                              Reject
-                            </Button>
+                            <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">Late Arrival</Badge>
+
+                            {employee.lateStatus === 'approved' && (
+                              <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Approved</Badge>
+                            )}
+
+                            {employee.lateStatus === 'rejected' && (
+                              <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
+                                Rejected · ₹{Number(employee.penaltyAmount || 0).toLocaleString('en-IN')} penalty
+                              </Badge>
+                            )}
+
+                            {(employee.lateStatus === 'pending' || !employee.lateStatus) && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-3 text-xs"
+                                  disabled={reviewingId === employee.id}
+                                  onClick={() => reviewLateAttendance(employee, 'approve')}
+                                >
+                                  {reviewingId === employee.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Approve'}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-3 text-xs text-destructive"
+                                  disabled={reviewingId === employee.id}
+                                  onClick={() => openRejectDialog(employee)}
+                                >
+                                  Reject
+                                </Button>
+                              </>
+                            )}
                           </div>
                         )}
 
@@ -942,20 +1062,26 @@ const EnhancedAttendanceSystem = () => {
         workingHours: record.totalHours,
         overtimeHours: record.overtimeHours,
         breakHours: record.breakHours,
-        isLate: record.is_late || false,
+        isLate: record.isLate || false,
         hasBreak: false,
         breaks: []
       }
     })
     : []
+  // Backend sends Decimal fields as strings (e.g. "2.50"), so always coerce
+  // through parseFloat before doing any math. Using `+` directly on these
+  // was doing string concatenation instead of addition, producing garbage
+  // values on the summary cards.
+  const toNumber = (val) => {
+    const n = parseFloat(val)
+    return isNaN(n) ? 0 : n
+  }
+
   const totalLateDays = isClient ? monthlyAttendance.filter((day) => day.isLate).length : 0
   const holidays = isClient ? monthlyAttendance.filter((day) => day.status === "holiday").length : 0
-  const totalWorkingHours = isClient ? monthlyAttendance.reduce((sum, day) => {
-    const hours = typeof day.workingHours === 'number' ? day.workingHours : 0
-    return sum + hours
-  }, 0) : 0
-  const totalOvertimeHours = isClient ? monthlyAttendance.reduce((sum, day) => sum + (day.overtimeHours || 0), 0) : 0
-  const totalBreakHours = isClient ? monthlyAttendance.reduce((sum, day) => sum + (day.breakHours || 0), 0) : 0
+  const totalWorkingHours = isClient ? monthlyAttendance.reduce((sum, day) => sum + toNumber(day.workingHours), 0) : 0
+  const totalOvertimeHours = isClient ? monthlyAttendance.reduce((sum, day) => sum + toNumber(day.overtimeHours), 0) : 0
+  const totalBreakHours = isClient ? monthlyAttendance.reduce((sum, day) => sum + toNumber(day.breakHours), 0) : 0
   const workingDays = isClient ? monthlyAttendance.filter((day) => day.status === "present" || day.status === "half-day").length : 0
 
   return (
@@ -1660,6 +1786,39 @@ const EnhancedAttendanceSystem = () => {
           />
         </div>
       )}
+
+      {/* Reject Late Request - Penalty Dialog */}
+      <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject Late Request</DialogTitle>
+            <DialogDescription>
+              {rejectTarget ? `Add a penalty for ${rejectTarget.name}'s late arrival. This amount will be deducted from this month's salary.` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="penalty-amount">Penalty Amount (₹)</Label>
+            <Input
+              id="penalty-amount"
+              type="number"
+              min="0"
+              placeholder="e.g. 100"
+              value={penaltyInput}
+              onChange={(e) => setPenaltyInput(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRejectDialogOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={confirmReject}
+              disabled={reviewingId === rejectTarget?.id}
+            >
+              {reviewingId === rejectTarget?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reject & Deduct'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

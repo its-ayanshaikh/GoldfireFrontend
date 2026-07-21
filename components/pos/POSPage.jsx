@@ -558,6 +558,11 @@ const POSPage = () => {
 
       const itemPayload = {
         product_id: item.id,
+        // variant + purchase lot are required for variant-based products,
+        // otherwise the backend looks up stock for variant=None and fails
+        // with "Insufficient stock".
+        variant_id: item.variantId || null,
+        purchase_item_id: item.purchaseItemId || null,
         qty: item.quantity,
         price: item.price,
         discount_type: discount.type === "%" ? "percentage" : "fixed",
@@ -700,47 +705,96 @@ const POSPage = () => {
     }
   }
 
-  const addExpense = () => {
-    if (!expenseName.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter expense name",
-        variant: "destructive",
+  // Load today's expenses for this branch from the backend
+  const fetchExpenses = async () => {
+    try {
+      const token = localStorage.getItem("access_token")
+      if (!token) return
+      const today = new Date().toISOString().split("T")[0]
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/pos/expenses/?date=${today}`, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       })
-      return
+      if (res.ok) {
+        const data = await res.json()
+        const list = (data.expenses || []).map(e => ({
+          id: e.id,
+          name: e.name,
+          amount: parseFloat(e.amount),
+          method: e.payment_method,
+          timestamp: new Date(e.created_at).toLocaleTimeString(),
+        }))
+        setExpenses(list)
+      }
+    } catch (err) {
+      console.error("Error loading expenses:", err)
     }
-
-    if (!expenseAmount || parseFloat(expenseAmount) <= 0) {
-      toast({
-        title: "Error",
-        description: "Please enter valid amount",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const newExpense = {
-      id: Date.now(),
-      name: expenseName.trim(),
-      amount: parseFloat(expenseAmount),
-      method: expenseMethod,
-      timestamp: new Date().toLocaleTimeString()
-    }
-
-    setExpenses([...expenses, newExpense])
-    setExpenseName("")
-    setExpenseAmount("")
-    setExpenseMethod("Cash")
-
-    toast({
-      title: "Success",
-      description: `Expense "${newExpense.name}" added for ₹${newExpense.amount}`,
-      className: "bg-green-50 border-green-200 text-green-800",
-    })
   }
 
-  const removeExpense = (id) => {
-    setExpenses(expenses.filter(exp => exp.id !== id))
+  useEffect(() => {
+    fetchExpenses()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const addExpense = async () => {
+    if (!expenseName.trim()) {
+      toast({ title: "Error", description: "Please enter expense name", variant: "destructive" })
+      return
+    }
+    if (!expenseAmount || parseFloat(expenseAmount) <= 0) {
+      toast({ title: "Error", description: "Please enter valid amount", variant: "destructive" })
+      return
+    }
+
+    try {
+      const token = localStorage.getItem("access_token")
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/pos/expenses/create/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: expenseName.trim(),
+          amount: parseFloat(expenseAmount),
+          payment_method: expenseMethod.toLowerCase(),
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || "Failed to save expense")
+      }
+
+      const e = await res.json()
+      setExpenses(prev => [
+        ...prev,
+        { id: e.id, name: e.name, amount: parseFloat(e.amount), method: e.payment_method, timestamp: new Date(e.created_at).toLocaleTimeString() },
+      ])
+      setExpenseName("")
+      setExpenseAmount("")
+      setExpenseMethod("Cash")
+
+      toast({
+        title: "Success",
+        description: `Expense "${e.name}" added for ₹${parseFloat(e.amount)}`,
+        className: "bg-green-50 border-green-200 text-green-800",
+      })
+    } catch (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    }
+  }
+
+  const removeExpense = async (id) => {
+    const prev = expenses
+    setExpenses(expenses.filter(exp => exp.id !== id)) // optimistic
+    try {
+      const token = localStorage.getItem("access_token")
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/pos/expenses/${id}/delete/`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      })
+      if (!res.ok) throw new Error("Failed to delete expense")
+    } catch (error) {
+      setExpenses(prev) // revert on failure
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    }
   }
 
   const StockOverview = ({ product }) => {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, X, ArrowLeft, Wallet, CreditCard, RefreshCw, CheckCircle, AlertCircle, Package, Truck, Calculator, Loader2, Percent, IndianRupee, Split } from "lucide-react"
+import { Search, X, ArrowLeft, Wallet, CreditCard, RefreshCw, CheckCircle, AlertCircle, Package, Truck, Calculator, Loader2, Percent, IndianRupee, Split, Send } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 
 const ReturnReplacePage = () => {
@@ -50,6 +50,7 @@ const ReturnReplacePage = () => {
   // Discount states for replacement
   const [discountType, setDiscountType] = useState("percentage") // "percentage" or "fixed"
   const [discountValue, setDiscountValue] = useState(0)
+  const [resendingBillId, setResendingBillId] = useState(null)
 
   const { toast } = useToast()
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL
@@ -219,7 +220,7 @@ const ReturnReplacePage = () => {
                 id: item.id,
                 product_id: item.product?.id,
                 name: item.product?.name || 'Unknown Product',
-                model: item.product?.model_name || '',
+                model: item.model_name || item.product?.model_name || '',
                 quantity: item.qty || 0,
                 price: parseFloat(item.price || 0),
                 returned: item.returned_qty || 0,
@@ -234,14 +235,11 @@ const ReturnReplacePage = () => {
           })
           
           setSearchedBills(transformedBills)
-          
-          // If only one bill, directly select it
-          if (transformedBills.length === 1) {
-            setSearchedBill(transformedBills[0])
-            setStep("selectItem")
-          } else {
-            setStep("selectBill")
-          }
+
+          // Always show the bill selection screen (even for a single bill) so
+          // the user can review the bill and pick Return / Replace / Pay Due.
+          setSearchedBill(null)
+          setStep("selectBill")
         } else {
           toast({
             title: "Bill Not Found",
@@ -788,13 +786,8 @@ const ReturnReplacePage = () => {
       setStep("selectItem")
     } else if (step === "selectItem") {
       setSearchedBill(null)
-      // Go back to bill selection if multiple bills, else to search
-      if (searchedBills.length > 1) {
-        setStep("selectBill")
-      } else {
-        setSearchedBills([])
-        setStep("search")
-      }
+      // Always go back to the bill selection screen
+      setStep("selectBill")
     } else if (step === "selectBill") {
       setSearchedBills([])
       setStep("search")
@@ -804,6 +797,40 @@ const ReturnReplacePage = () => {
   const handleBillSelect = (bill) => {
     setSearchedBill(bill)
     setStep("selectItem")
+  }
+
+  // Re-send a bill to the customer on WhatsApp
+  const handleResendBill = async (bill) => {
+    if (bill?.isPayLater === undefined && !bill?.id) return
+    try {
+      setResendingBillId(bill.billId || bill.id)
+      const response = await fetch(`${API_BASE}/api/pos/bills/${bill.billId || bill.id}/resend/`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      })
+      const data = await response.json()
+      if (response.ok) {
+        toast({
+          title: "Bill Resent",
+          description: data.message || `Bill #${bill.id} sent to customer on WhatsApp.`,
+        })
+      } else {
+        toast({
+          title: "Resend Failed",
+          description: data.error || "Could not resend the bill.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Error resending bill:', error)
+      toast({
+        title: "Network Error",
+        description: "Failed to connect to server.",
+        variant: "destructive",
+      })
+    } finally {
+      setResendingBillId(null)
+    }
   }
 
   return (
@@ -982,6 +1009,14 @@ const ReturnReplacePage = () => {
                           >
                             <RefreshCw size={14} />
                             Replace
+                          </button>
+                          <button
+                            onClick={() => handleResendBill(bill)}
+                            disabled={resendingBillId === (bill.billId || bill.id)}
+                            className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg font-medium hover:bg-purple-200 transition-colors flex items-center gap-1.5 text-xs disabled:opacity-60"
+                          >
+                            {resendingBillId === (bill.billId || bill.id) ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                            Resend Bill
                           </button>
                         </div>
                       </div>

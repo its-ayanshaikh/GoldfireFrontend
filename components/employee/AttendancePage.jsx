@@ -60,6 +60,9 @@ const AttendancePage = ({ user }) => {
         checkOut: record.logout_time ? new Date(record.logout_time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : null,
         workHours: record.total_hours ? record.total_hours : "0.0",
         status: record.status,
+        isLate: record.is_late || false,
+        lateStatus: record.late_status || null,
+        penaltyAmount: parseFloat(record.penalty_amount || 0),
         loginImage: record.login_image,
         logoutImage: record.logout_image,
         employee: data.employee
@@ -679,6 +682,28 @@ const AttendancePage = ({ user }) => {
                         </BadgeComponent>
                         <div>
                           <p className="font-medium text-foreground">{record.date}</p>
+                          {record.isLate && (
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-100">
+                                Late
+                              </span>
+                              {record.lateStatus === 'approved' && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100">
+                                  Approved
+                                </span>
+                              )}
+                              {record.lateStatus === 'rejected' && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-100">
+                                  ₹{Number(record.penaltyAmount || 0).toLocaleString('en-IN')} deducted
+                                </span>
+                              )}
+                              {(record.lateStatus === 'pending' || !record.lateStatus) && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-100">
+                                  Pending review
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
 

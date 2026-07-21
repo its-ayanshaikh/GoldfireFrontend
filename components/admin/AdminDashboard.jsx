@@ -16,6 +16,8 @@ import SalaryManagement from "./SalaryManagement"
 import EnhancedAttendanceSystem from "./EnhancedAttendanceSystem"
 import LeaveManagement from "./LeaveManagement"
 import LeaveRequests from "./LeaveRequests"
+import EmployeePerformance from "./EmployeePerformance"
+import ExpensesManagement from "./ExpensesManagement"
 import TaskManagement from "./TaskManagement" // Added TaskManagement import
 import CustomerManagement from "./CustomerManagement" // Added CustomerManagement import
 import BillsManagement from "./BillsManagement" // Added BillsManagement import
@@ -40,6 +42,8 @@ const AdminDashboard = ({ view, user, onLogout }) => {
   const [currentView, setCurrentView] = useState("dashboard")
   const [showCustomerList, setShowCustomerList] = useState(false)
   const [selectedCustomerType, setSelectedCustomerType] = useState(null)
+  const [allSegments, setAllSegments] = useState(null) // full segmented customer list for "View All"
+  const [allSegmentsLoading, setAllSegmentsLoading] = useState(false)
 
   // API Data States
   const [dashboardData, setDashboardData] = useState(null)
@@ -84,6 +88,32 @@ const AdminDashboard = ({ view, user, onLogout }) => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Fetch ALL segmented customers (for "View All")
+  const fetchAllSegments = async (branchId = null) => {
+    setAllSegmentsLoading(true)
+    try {
+      let url = `${API_BASE}/api/branch/customer-segments/`
+      if (branchId && branchId !== 'all') {
+        url += `?branch_id=${branchId}`
+      }
+      const response = await fetch(url, { headers: getAuthHeaders() })
+      if (response.ok) {
+        const data = await response.json()
+        setAllSegments(data)
+      }
+    } catch (error) {
+      console.error('Error fetching customer segments:', error)
+    } finally {
+      setAllSegmentsLoading(false)
+    }
+  }
+
+  const handleViewAllCustomers = () => {
+    setSelectedCustomerType(null)
+    setShowCustomerList(true)
+    fetchAllSegments(selectedBranch)
   }
 
   // Fetch branches for dropdown
@@ -132,10 +162,12 @@ const AdminDashboard = ({ view, user, onLogout }) => {
       '/admin/employee': 'employee-list',
       '/admin/attendance': 'attendance-system',
       '/admin/salary': 'salary-management',
+      '/admin/employee-performance': 'employee-performance',
       '/admin/leave-requests': 'leave-requests',
       '/admin/leave': 'leave-management',
       '/admin/task': 'task-management',
       '/admin/customer': 'customer-management',
+      '/admin/expenses': 'expenses',
       '/admin/bill': 'bills-management',
       '/admin/vendor': 'vendor-management',
       '/admin/branch': 'branch-management',
@@ -160,6 +192,7 @@ const AdminDashboard = ({ view, user, onLogout }) => {
     // Reset customer list state
     setShowCustomerList(false)
     setSelectedCustomerType(null)
+    setAllSegments(null)
   }, [location.pathname])
 
   // Handle browser back/forward buttons
@@ -321,10 +354,12 @@ const AdminDashboard = ({ view, user, onLogout }) => {
       'employee-list': '/admin/employee',
       'attendance-system': '/admin/attendance',
       'salary-management': '/admin/salary',
+      'employee-performance': '/admin/employee-performance',
       'leave-management': '/admin/leave',
       'leave-requests': '/admin/leave-requests',
       'task-management': '/admin/task',
       'customer-management': '/admin/customer',
+      'expenses': '/admin/expenses',
       'bills-management': '/admin/bill',
       'vendor-management': '/admin/vendor',
       'branch-management': '/admin/branch',
@@ -341,13 +376,31 @@ const AdminDashboard = ({ view, user, onLogout }) => {
   const handleCustomerCardClick = (customerType) => {
     setSelectedCustomerType(customerType)
     setShowCustomerList(true)
-    // For customer filtering, we'll keep it on dashboard for now
-    // Later can be converted to /admin/customer?type=xyz if needed
+    // Load the full segmented list so the filtered view shows all customers
+    fetchAllSegments(selectedBranch)
   }
 
   const getFilteredCustomers = () => {
-    if (!selectedCustomerType) return customerSegments
-    return customerSegments.filter((customer) => customer.status === selectedCustomerType)
+    // Prefer the full segmented list when it has been loaded ("View All")
+    let source = customerSegments
+    if (allSegments?.segments) {
+      source = [
+        ...(allSegments.segments.frequent || []),
+        ...(allSegments.segments.regular || []),
+        ...(allSegments.segments.lost || [])
+      ].map(customer => ({
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        totalPurchases: customer.total_purchases,
+        totalSpent: customer.total_spent,
+        lastPurchase: customer.last_purchase,
+        status: customer.status,
+        frequency: customer.status === 'frequent' ? 'Weekly' : customer.status === 'regular' ? 'Monthly' : 'Rare'
+      }))
+    }
+    if (!selectedCustomerType) return source
+    return source.filter((customer) => customer.status === selectedCustomerType)
   }
 
   const getCustomerTypeTitle = () => {
@@ -371,6 +424,8 @@ const AdminDashboard = ({ view, user, onLogout }) => {
         return <EnhancedAttendanceSystem />
       case "salary-management":
         return <SalaryManagement />
+      case "employee-performance":
+        return <EmployeePerformance />
       case "leave-management":
         return <LeaveManagement />
       case "leave-requests":
@@ -379,6 +434,8 @@ const AdminDashboard = ({ view, user, onLogout }) => {
         return <TaskManagement />
       case "customer-management":
         return <CustomerManagement />
+      case "expenses":
+        return <ExpensesManagement />
       case "bills-management":
         return <BillsManagement />
       case "vendor-management":
@@ -431,9 +488,14 @@ const AdminDashboard = ({ view, user, onLogout }) => {
                 <Card>
                   <CardHeader>
                     <CardTitle>{getCustomerTypeTitle()} List</CardTitle>
-                    <CardDescription>Detailed view of {selectedCustomerType} customers</CardDescription>
+                    <CardDescription>Detailed view of {selectedCustomerType || 'all'} customers</CardDescription>
                   </CardHeader>
                   <CardContent>
+                    {allSegmentsLoading && (
+                      <div className="py-8 flex items-center justify-center text-muted-foreground">
+                        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading customers...
+                      </div>
+                    )}
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse">
                         <thead>
@@ -529,7 +591,25 @@ const AdminDashboard = ({ view, user, onLogout }) => {
 
             {!loading && <div className="space-y-8">
               {/* Overview Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Mobile: all 4 stats fit in ONE line (no scroll), very compact */}
+              <div className="sm:hidden grid grid-cols-4 gap-1.5">
+                {stats.map((stat, index) => {
+                  const Icon = stat.icon
+                  return (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-border bg-card px-1.5 py-2 flex flex-col items-center text-center"
+                    >
+                      <Icon className="h-3.5 w-3.5 text-muted-foreground mb-0.5" />
+                      <div className="text-sm font-bold text-foreground leading-tight truncate w-full">{stat.value}</div>
+                      <span className="text-[9px] text-muted-foreground leading-tight line-clamp-2">{stat.title}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Desktop: full stat cards grid */}
+              <div className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-6">
                 {stats.map((stat, index) => {
                   const Icon = stat.icon
                   return (
@@ -690,8 +770,8 @@ const AdminDashboard = ({ view, user, onLogout }) => {
               {/* Customer Analytics Section */}
               <div>
                 <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-4">Customer Analytics</h2>
-                {/* Customer Status Overview */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6">
+                {/* Customer Status Overview - 2-up compact on mobile */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-6 mb-6">
                   <Card
                     className="border-l-4 border-l-green-500 cursor-pointer hover:shadow-md transition-shadow"
                     onClick={() => handleCustomerCardClick("frequent")}
@@ -755,11 +835,57 @@ const AdminDashboard = ({ view, user, onLogout }) => {
                 {/* Customer Segments Table */}
                 <Card className="mb-6">
                   <CardHeader className="p-4 sm:p-6">
-                    <CardTitle className="text-lg sm:text-xl">Customer Segments Analysis</CardTitle>
-                    <CardDescription className="text-sm">Detailed breakdown of customer behavior and status</CardDescription>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <CardTitle className="text-lg sm:text-xl">Customer Segments Analysis</CardTitle>
+                        <CardDescription className="text-sm">Detailed breakdown of customer behavior and status</CardDescription>
+                      </div>
+                      <Button variant="outline" size="sm" className="shrink-0" onClick={handleViewAllCustomers}>
+                        View All
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6">
-                    <div className="overflow-x-auto">
+                    {/* Mobile: card list (no horizontal scroll) */}
+                    <div className="sm:hidden space-y-3">
+                      {customerSegments.length === 0 ? (
+                        <div className="py-8 text-center text-muted-foreground text-sm">No customer data available</div>
+                      ) : customerSegments.map((customer) => (
+                        <div key={customer.id} className="border border-border rounded-lg p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-medium text-foreground flex items-center gap-1.5 text-sm">
+                                {getStatusIcon(customer.status)}
+                                <span className="truncate">{customer.name}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">{customer.phone || customer.email}</div>
+                            </div>
+                            {getStatusBadge(customer.status)}
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-3 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Purchases</span>
+                              <span className="text-foreground font-medium">{customer.totalPurchases}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Spent</span>
+                              <span className="text-foreground font-medium">₹{(customer.totalSpent || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Frequency</span>
+                              <span className="text-foreground font-medium">{customer.frequency}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Last</span>
+                              <span className="text-foreground font-medium">{customer.lastPurchase || '-'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Desktop: table */}
+                    <div className="hidden sm:block overflow-x-auto">
                       <table className="w-full border-collapse">
                         <thead>
                           <tr className="border-b border-border">
@@ -836,13 +962,6 @@ const AdminDashboard = ({ view, user, onLogout }) => {
                           <div className="text-sm">
                             <span className="font-medium">Sales:</span> {topPerformer.total_sales || topPerformer.monthlySales || 0}
                           </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Revenue:</span> ₹
-                            {(topPerformer.total_revenue || topPerformer.monthlyRevenue || 0).toLocaleString()}
-                          </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Efficiency:</span> {topPerformer.efficiency || 100}%
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -862,7 +981,7 @@ const AdminDashboard = ({ view, user, onLogout }) => {
                 <Card>
                   <CardHeader>
                     <CardTitle>Employee Performance Details</CardTitle>
-                    <CardDescription>Comprehensive performance metrics for all team members</CardDescription>
+                    <CardDescription>Number of sales made by each team member</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {otherEmployees.length === 0 ? (
@@ -870,66 +989,48 @@ const AdminDashboard = ({ view, user, onLogout }) => {
                         No employee performance data available
                       </div>
                     ) : (
-                    <div className="overflow-x-auto">
+                    <>
+                    {/* Mobile: card list (no horizontal scroll) */}
+                    <div className="sm:hidden space-y-3">
+                      {otherEmployees.map((employee) => (
+                        <div key={employee.id} className="border border-border rounded-lg p-3 flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-medium text-foreground text-sm truncate">{employee.name}</div>
+                            <div className="text-xs text-muted-foreground truncate">{employee.position || employee.role}</div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-base font-bold text-foreground">{employee.total_sales || employee.monthlySales || 0}</div>
+                            <div className="text-[10px] text-muted-foreground">Sales</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Desktop: table */}
+                    <div className="hidden sm:block overflow-x-auto">
                       <table className="w-full border-collapse">
                         <thead>
                           <tr className="border-b border-border">
                             <th className="text-left p-4 font-medium text-foreground">Employee</th>
-                            <th className="text-center p-4 font-medium text-foreground">Status</th>
                             <th className="text-right p-4 font-medium text-foreground">Sales</th>
-                            <th className="text-right p-4 font-medium text-foreground">Target</th>
-                            <th className="text-right p-4 font-medium text-foreground">Revenue</th>
-                            <th className="text-right p-4 font-medium text-foreground">Efficiency</th>
-                            <th className="text-center p-4 font-medium text-foreground">Rating</th>
                           </tr>
                         </thead>
                         <tbody>
                           {otherEmployees.map((employee) => (
                             <tr key={employee.id} className="border-b border-border hover:bg-accent">
                               <td className="p-4">
-                                <div className="flex items-center gap-3">
-                                  <Avatar className="h-10 w-10">
-                                    <AvatarImage src={employee.avatar || "/placeholder.svg"} alt={employee.name} />
-                                    <AvatarFallback>
-                                      {employee.name
-                                        ?.split(" ")
-                                        .map((n) => n[0])
-                                        .join("") || "?"}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div>
-                                    <div className="font-medium text-foreground">{employee.name}</div>
-                                    <div className="text-sm text-muted-foreground">{employee.position || employee.role}</div>
-                                  </div>
+                                <div>
+                                  <div className="font-medium text-foreground">{employee.name}</div>
+                                  <div className="text-sm text-muted-foreground">{employee.position || employee.role}</div>
                                 </div>
                               </td>
-                              <td className="p-4 text-center">{getPerformanceBadge(employee.status || 'good')}</td>
                               <td className="p-4 text-right text-foreground font-medium">{employee.total_sales || employee.monthlySales || 0}</td>
-                              <td className="p-4 text-right text-muted-foreground">{employee.target || '-'}</td>
-                              <td className="p-4 text-right text-foreground">
-                                ₹{(employee.total_revenue || employee.monthlyRevenue || 0).toLocaleString()}
-                              </td>
-                              <td
-                                className={`p-4 text-right font-medium ${(employee.efficiency || 100) >= 100
-                                  ? "text-green-600"
-                                  : (employee.efficiency || 100) >= 80
-                                    ? "text-blue-600"
-                                    : "text-yellow-600"
-                                  }`}
-                              >
-                                {employee.efficiency || 100}%
-                              </td>
-                              <td className="p-4 text-center">
-                                <div className="flex items-center justify-center gap-1">
-                                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                                  <span className="font-medium text-foreground">{employee.rating || '-'}</span>
-                                </div>
-                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
+                    </>
                     )}
                   </CardContent>
                 </Card>

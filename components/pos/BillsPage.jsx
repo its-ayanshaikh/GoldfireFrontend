@@ -98,11 +98,13 @@ const BillsPage = () => {
                     id: item.id,
                     product_id: item.product?.id, // Product ke andar ki ID
                     name: item.product?.name || 'Unknown Product',
-                    model: item.product?.model_name || 'Unknown Product',
+                    model: item.model_name || '-', // model_name is top-level on the bill item
                     quantity: item.qty || 0,
                     price: parseFloat(item.price || 0),
                     rack: "N/A", // Not in API response
-                    returned: 0, // Default, can be updated
+                    returned: item.returned_qty || 0, // already-returned qty from backend
+                    isReturned: item.is_returned || false,
+                    serial_number: item.serial_number || null,
                     gst: 18, // Default GST
                     salesperson: item.salesperson?.name || 'Unknown Salesperson',
                     discount_type: item.discount_type || 'percentage',
@@ -110,7 +112,6 @@ const BillsPage = () => {
                     final_amount: parseFloat(item.final_amount || 0)
                   }
 
-                  console.log('Transformed item:', transformedItem)
                   return transformedItem
                 }),
                 payments: bill.payments || [],
@@ -206,11 +207,13 @@ const BillsPage = () => {
                 items: (bill.items || []).map(item => ({
                   id: item.id,
                   name: item.product?.name || 'Unknown Product',
-                  model: item.product?.model_name || 'Unknown Product', // Using name as model since model not in response
+                  model: item.model_name || '-', // model_name is top-level on the bill item
                   quantity: item.qty || 0,
                   price: parseFloat(item.price || 0),
                   rack: "N/A", // Not in API response
-                  returned: 0, // Default, can be updated
+                  returned: item.returned_qty || 0, // already-returned qty from backend
+                  isReturned: item.is_returned || false,
+                  serial_number: item.serial_number || null,
                   gst: 18, // Default GST
                   salesperson: item.salesperson?.name || 'Unknown Salesperson',
                   discount_type: item.discount_type || 'percentage',

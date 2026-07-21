@@ -24,6 +24,7 @@ import {
   Plus,
   Settings,
   FileText,
+  Wallet,
 } from "lucide-react"
 import { useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
@@ -52,10 +53,12 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
       'employee-list': '/admin/employee',
       'attendance-system': '/admin/attendance',
       'salary-management': '/admin/salary',
+      'employee-performance': '/admin/employee-performance',
       'leave-management': '/admin/leave',
       'leave-requests': '/admin/leave-requests',
       'task-management': '/admin/task',
       'customer-management': '/admin/customer',
+      'expenses': '/admin/expenses',
       'bills-management': '/admin/bill',
       'vendor-management': '/admin/vendor',
       'branch-management': '/admin/branch',
@@ -149,14 +152,6 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
         handleViewChange("bills-management")
       },
     },
-    {
-      id: "temporary-pos",
-      label: "Temporary POS",
-      icon: FileText,
-      onClick: () => {
-        handleViewChange("temporary-pos")
-      },
-    },
 
     // 3. Customer Relations (High Priority)
     {
@@ -165,6 +160,14 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
       icon: User,
       onClick: () => {
         handleViewChange("customer-management")
+      },
+    },
+    {
+      id: "expenses",
+      label: "Expenses",
+      icon: Wallet,
+      onClick: () => {
+        handleViewChange("expenses")
       },
     },
 
@@ -207,6 +210,14 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
           icon: List,
           onClick: () => {
             handleViewChange("leave-requests")
+          },
+        },
+        {
+          id: "employee-performance",
+          label: "Performance",
+          icon: BarChart3,
+          onClick: () => {
+            handleViewChange("employee-performance")
           },
         },
       ],
@@ -277,6 +288,7 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
                       (item.id === "employees" &&
                         (currentView?.startsWith("employee") ||
                           currentView?.includes("employee") ||
+                          currentView === "employee-performance" ||
                           currentView === "attendance-system" ||
                           currentView === "leave-management" ||
                           currentView === "leave-requests" ||
@@ -325,6 +337,7 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
                                 (subItem.id === "salary-management" && currentView === "salary-management") ||
                                 (subItem.id === "leave-management" && currentView === "leave-management") ||
                                 (subItem.id === "leave-requests" && currentView === "leave-requests") ||
+                                (subItem.id === "employee-performance" && currentView === "employee-performance") ||
                                 (subItem.id === "task-list" && currentView === "task-management") ||
                                 (subItem.id === "product-list" && currentView === "product-list") ||
                                 (subItem.id === "product-add" && currentView === "product-add") ||
@@ -348,10 +361,10 @@ const AdminSidebar = ({ user, onLogout, currentView, onViewChange }) => {
                   variant={
                     currentView === item.id ||
                       (item.id === "customers" && currentView === "customer-management") ||
+                      (item.id === "expenses" && currentView === "expenses") ||
                       (item.id === "bills" && currentView === "bills-management") ||
                       (item.id === "vendors" && currentView === "vendor-management") ||
-                      (item.id === "branches" && currentView === "branch-management") ||
-                      (item.id === "temporary-pos" && currentView === "temporary-pos")
+                      (item.id === "branches" && currentView === "branch-management")
                       ? "secondary"
                       : "ghost"
                   }

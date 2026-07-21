@@ -366,17 +366,29 @@ const CustomerManagement = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedBill.items.map((item, idx) => (
+                        {selectedBill.items.map((item, idx) => {
+                          const fullyReturned = item.is_returned
+                          const partiallyReturned = !fullyReturned && (item.returned_qty || 0) > 0
+                          return (
                           <tr key={idx} className="border-b hover:bg-gray-50">
                             <td className="p-3">
-                              <p className="font-medium text-foreground">{item.product_name}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className={`font-medium ${fullyReturned ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{item.product_name}</p>
+                                {fullyReturned && (
+                                  <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">Returned</span>
+                                )}
+                                {partiallyReturned && (
+                                  <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">Returned {item.returned_qty} of {item.qty}</span>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground">CGST: {item.cgst_percent}% | SGST: {item.sgst_percent}%</p>
                             </td>
                             <td className="p-3 text-center text-foreground">{item.qty}</td>
                             <td className="p-3 text-right text-foreground">₹{item.price?.toLocaleString() || 0}</td>
                             <td className="p-3 text-right font-semibold text-foreground">₹{item.final_amount?.toLocaleString() || 0}</td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>

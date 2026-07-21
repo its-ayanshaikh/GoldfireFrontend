@@ -31,12 +31,14 @@ const LegacyRedirectHandler = () => {
         'employee-list': '/admin/employee',
         'attendance-system': '/admin/attendance',
         'salary-management': '/admin/salary',
+        'employee-performance': '/admin/employee-performance',
         'leave-management': '/admin/leave',
         'leave-requests': '/admin/leave-requests',
         'task-management': '/admin/task',
         'task-list': '/admin/task',
         'task-view': id ? `/admin/task/${id}` : '/admin/task',
         'customer-management': '/admin/customer',
+        'expenses': '/admin/expenses',
         'bills-management': '/admin/bill',
         'vendor-management': '/admin/vendor',
         'branch-management': '/admin/branch',
@@ -94,6 +96,7 @@ const AdminRouter = ({ user, onLogout }) => {
             <Route path="/admin/salary" element={<AdminDashboardWrapper view="salary" user={user} onLogout={onLogout} />} />
             <Route path="/admin/leave-requests" element={<AdminDashboardWrapper view="leave-requests" user={user} onLogout={onLogout} />} />
             <Route path="/admin/leave" element={<AdminDashboardWrapper view="leave" user={user} onLogout={onLogout} />} />
+            <Route path="/admin/employee-performance" element={<AdminDashboardWrapper view="employee-performance" user={user} onLogout={onLogout} />} />
 
             {/* Task routes */}
             <Route path="/admin/task" element={<AdminDashboardWrapper view="task" user={user} onLogout={onLogout} />} />
@@ -101,6 +104,7 @@ const AdminRouter = ({ user, onLogout }) => {
 
             {/* Other routes */}
             <Route path="/admin/customer" element={<AdminDashboardWrapper view="customer" user={user} onLogout={onLogout} />} />
+            <Route path="/admin/expenses" element={<AdminDashboardWrapper view="expenses" user={user} onLogout={onLogout} />} />
             <Route path="/admin/bill" element={<AdminDashboardWrapper view="bill" user={user} onLogout={onLogout} />} />
             <Route path="/admin/vendor" element={<AdminDashboardWrapper view="vendor" user={user} onLogout={onLogout} />} />
             <Route path="/admin/branch" element={<AdminDashboardWrapper view="branch" user={user} onLogout={onLogout} />} />

@@ -89,25 +89,37 @@ const StockTransfer = () => {
         setPrevPage(data.previous)
         setCurrentPage(page)
 
-        // Transform API response to match component structure
-        const transformedProducts = results.map(product => ({
-          id: product.id,
-          name: product.name,
-          brand: product.brand_name || "Unknown Brand",
-          model: product.model_name || "-",
-          category: product.category_name || "Unknown Category",
-          categoryId: product.category,
-          branchQuantities: (product.quantities || []).reduce((acc, qty) => {
-            acc[qty.branch_name] = {
-              qty: qty.qty,
-              branchId: qty.branch,
-              rack: qty.rack_name
-            }
-            return acc
-          }, {}),
-          // Store original quantities for detailed view
-          quantities: product.quantities || []
-        }))
+        // Transform API response to match component structure.
+        // Stock now comes from the live Stock model (kept in sync with the
+        // purchase / StockIn ledger) via the backend `branch_qty` field.
+        const transformedProducts = results.map(product => {
+          const branchStock = product.branch_qty || product.quantities || []
+          const normalized = branchStock.map(q => ({
+            branch: q.branch_id ?? q.branch,
+            branch_name: q.branch_name,
+            qty: q.qty,
+            rack_name: q.rack_name || null,
+          }))
+          return {
+            id: product.id,
+            name: product.name,
+            brand: product.brand_name || "Unknown Brand",
+            model: product.model_name || "-",
+            price: product.display_price ?? product.selling_price ?? 0,
+            category: product.category_name || "Unknown Category",
+            categoryId: product.category,
+            branchQuantities: normalized.reduce((acc, q) => {
+              acc[q.branch_name] = {
+                qty: q.qty,
+                branchId: q.branch,
+                rack: q.rack_name,
+              }
+              return acc
+            }, {}),
+            // Store normalized branch stock for the detailed view
+            quantities: normalized,
+          }
+        })
 
         setProducts(transformedProducts)
       } else {
@@ -560,6 +572,7 @@ const StockTransfer = () => {
                         <th className="text-left p-3 font-semibold">Product Name</th>
                         <th className="text-left p-3 font-semibold">Brand</th>
                         <th className="text-left p-3 font-semibold">Model</th>
+                        <th className="text-right p-3 font-semibold">Price</th>
                         <th className="text-left p-3 font-semibold">Category</th>
                         <th className="text-left p-3 font-semibold">Actions</th>
                       </tr>
@@ -570,6 +583,7 @@ const StockTransfer = () => {
                           <td className="p-3 font-medium">{product.name}</td>
                           <td className="p-3 text-gray-700">{product.brand}</td>
                           <td className="p-3 text-gray-600">{product.model}</td>
+                          <td className="p-3 text-right text-gray-800 font-medium">₹{Number(product.price || 0).toLocaleString()}</td>
                           <td className="p-3 text-gray-700">{product.category}</td>
                           <td className="p-3">
                             <div className="flex gap-2">
