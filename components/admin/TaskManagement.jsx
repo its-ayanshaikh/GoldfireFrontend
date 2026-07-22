@@ -1012,35 +1012,35 @@ const TaskManagement = () => {
       ) : (
         <>
           {/* Task Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-2 sm:gap-4 mb-6">
             <Card>
-              <CardContent className="p-4">
-                <div className="text-2xl font-bold text-foreground">{totalCount}</div>
-                <p className="text-sm text-muted-foreground">Total Tasks</p>
+              <CardContent className="p-3 sm:p-4">
+                <div className="text-lg sm:text-2xl font-bold text-foreground">{totalCount}</div>
+                <p className="text-[11px] sm:text-sm text-muted-foreground">Total Tasks</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4">
-                <div className="text-2xl font-bold text-green-600">{taskStats.completed}</div>
-                <p className="text-sm text-muted-foreground">Completed</p>
+              <CardContent className="p-3 sm:p-4">
+                <div className="text-lg sm:text-2xl font-bold text-green-600">{taskStats.completed}</div>
+                <p className="text-[11px] sm:text-sm text-muted-foreground">Completed</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4">
-                <div className="text-2xl font-bold text-blue-600">{taskStats.inProgress}</div>
-                <p className="text-sm text-muted-foreground">In Progress</p>
+              <CardContent className="p-3 sm:p-4">
+                <div className="text-lg sm:text-2xl font-bold text-blue-600">{taskStats.inProgress}</div>
+                <p className="text-[11px] sm:text-sm text-muted-foreground">In Progress</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4">
-                <div className="text-2xl font-bold text-yellow-600">{taskStats.pending}</div>
-                <p className="text-sm text-muted-foreground">Pending</p>
+              <CardContent className="p-3 sm:p-4">
+                <div className="text-lg sm:text-2xl font-bold text-yellow-600">{taskStats.pending}</div>
+                <p className="text-[11px] sm:text-sm text-muted-foreground">Pending</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4">
-                <div className="text-2xl font-bold text-red-600">{taskStats.overdue}</div>
-                <p className="text-sm text-muted-foreground">Overdue</p>
+              <CardContent className="p-3 sm:p-4">
+                <div className="text-lg sm:text-2xl font-bold text-red-600">{taskStats.overdue}</div>
+                <p className="text-[11px] sm:text-sm text-muted-foreground">Overdue</p>
               </CardContent>
             </Card>
           </div>
@@ -1124,7 +1124,7 @@ const TaskManagement = () => {
                           Create Task
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                      <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle>Create New Task</DialogTitle>
                           <DialogDescription>Create and assign a new task to an employee</DialogDescription>
@@ -1410,7 +1410,7 @@ const TaskManagement = () => {
       )}
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Task</DialogTitle>
             <DialogDescription>Update task details and assignment</DialogDescription>
@@ -1560,11 +1560,11 @@ const TaskManagement = () => {
       </Dialog>
 
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-y-auto">
           {selectedTask && (
             <>
               <DialogHeader>
-                <DialogTitle>{selectedTask.name}</DialogTitle>
+                <DialogTitle className="break-words pr-6">{selectedTask.name}</DialogTitle>
                 <DialogDescription>
                   Assigned to {Array.isArray(selectedTask.assignedEmployees) && selectedTask.assignedEmployees.length > 0
                     ? selectedTask.assignedEmployees.filter(e => e).map((e) => e.name).join(", ")
@@ -1616,7 +1616,7 @@ const TaskManagement = () => {
 
       {/* Submission View Dialog */}
       <Dialog open={isSubmissionViewOpen} onOpenChange={setIsSubmissionViewOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Task Submission Details</DialogTitle>
             <DialogDescription>View detailed submission information</DialogDescription>
