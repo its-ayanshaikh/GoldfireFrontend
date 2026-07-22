@@ -93,6 +93,7 @@ const AdminRouter = ({ user, onLogout }) => {
             {/* Employee routes */}
             <Route path="/admin/employee" element={<AdminDashboardWrapper view="employee" user={user} onLogout={onLogout} />} />
             <Route path="/admin/attendance" element={<AdminDashboardWrapper view="attendance" user={user} onLogout={onLogout} />} />
+            <Route path="/admin/attendance/:id" element={<AdminDashboardWrapper view="attendance" user={user} onLogout={onLogout} />} />
             <Route path="/admin/salary" element={<AdminDashboardWrapper view="salary" user={user} onLogout={onLogout} />} />
             <Route path="/admin/leave-requests" element={<AdminDashboardWrapper view="leave-requests" user={user} onLogout={onLogout} />} />
             <Route path="/admin/leave" element={<AdminDashboardWrapper view="leave" user={user} onLogout={onLogout} />} />
@@ -104,8 +105,11 @@ const AdminRouter = ({ user, onLogout }) => {
 
             {/* Other routes */}
             <Route path="/admin/customer" element={<AdminDashboardWrapper view="customer" user={user} onLogout={onLogout} />} />
+            <Route path="/admin/customer/:id" element={<AdminDashboardWrapper view="customer" user={user} onLogout={onLogout} />} />
+            <Route path="/admin/customer/:id/bill/:billId" element={<AdminDashboardWrapper view="customer" user={user} onLogout={onLogout} />} />
             <Route path="/admin/expenses" element={<AdminDashboardWrapper view="expenses" user={user} onLogout={onLogout} />} />
             <Route path="/admin/bill" element={<AdminDashboardWrapper view="bill" user={user} onLogout={onLogout} />} />
+            <Route path="/admin/bill/:id" element={<AdminDashboardWrapper view="bill" user={user} onLogout={onLogout} />} />
             <Route path="/admin/vendor" element={<AdminDashboardWrapper view="vendor" user={user} onLogout={onLogout} />} />
             <Route path="/admin/branch" element={<AdminDashboardWrapper view="branch" user={user} onLogout={onLogout} />} />
             <Route path="/admin/settings" element={<AdminDashboardWrapper view="settings" user={user} onLogout={onLogout} />} />

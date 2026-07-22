@@ -10,10 +10,13 @@ import { Label } from "../ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useParams as useRouteParams, useNavigate as useRouteNavigate } from "react-router-dom"
 
 const BillsManagement = () => {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const routeParams = useRouteParams()
+  const routeNavigate = useRouteNavigate()
 
   // State
   const [bills, setBills] = useState([])
@@ -144,6 +147,25 @@ const BillsManagement = () => {
     router.push(`?page=${currentPage}`, { scroll: false })
   }, [currentPage, router])
 
+  // ---- Sync the open bill with the URL (/admin/bill/:id) — refresh & back safe ----
+  useEffect(() => {
+    const urlBillId = routeParams.id ? Number(routeParams.id) : null
+    if (!urlBillId) {
+      setSelectedBill(null)
+      return
+    }
+    const found = bills.find((b) => b.id === urlBillId)
+    if (found) setSelectedBill(found)
+  }, [routeParams.id, bills])
+
+  const openBillDetail = (bill) => {
+    routeNavigate(`/admin/bill/${bill.id}`)
+  }
+
+  const closeBillDetail = () => {
+    routeNavigate('/admin/bill')
+  }
+
   const getPaymentMethodColor = (method) => {
     const colors = {
       cash: "bg-green-100 text-green-800",
@@ -198,7 +220,7 @@ const BillsManagement = () => {
       <div className="p-6 space-y-4">
         <Button
           variant="outline"
-          onClick={() => setSelectedBill(null)}
+          onClick={closeBillDetail}
           className="flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -431,7 +453,7 @@ const BillsManagement = () => {
                 <Card
                   key={bill.id}
                   className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setSelectedBill(bill)}
+                  onClick={() => openBillDetail(bill)}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useParams, useNavigate } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
 import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
@@ -9,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Search, User, Phone, ChevronLeft, ChevronRight, Loader2, ArrowLeft, DollarSign, X } from "lucide-react"
 
 const CustomerManagement = () => {
+  const routeParams = useParams()
+  const navigate = useNavigate()
   // Customer List States
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("")
@@ -240,16 +243,49 @@ const CustomerManagement = () => {
   }, [selectedCustomer, billsCurrentPage, debouncedBillSearchQuery, paymentFilter])
 
   const handleCustomerClick = (customer) => {
-    setSelectedCustomer(customer)
     setBillsCurrentPage(1)
     setBillSearchQuery("")
     setPaymentFilter("all")
+    // URL drives the detail view (refresh-safe)
+    navigate(`/admin/customer/${customer.id}`)
   }
 
   const handleBackToList = () => {
-    setSelectedCustomer(null)
-    setCustomerDetail(null)
-    setBills([])
+    navigate('/admin/customer')
+  }
+
+  // ---- Sync selected customer / bill from the URL (refresh-safe) ----
+  useEffect(() => {
+    const urlCustomerId = routeParams.id ? Number(routeParams.id) : null
+    if (urlCustomerId) {
+      // Open (or keep) the customer detail. On refresh we only have the id;
+      // the bills fetch populates customerDetail with the full info.
+      setSelectedCustomer((prev) => (prev && prev.id === urlCustomerId ? prev : { id: urlCustomerId }))
+    } else {
+      setSelectedCustomer(null)
+      setCustomerDetail(null)
+      setBills([])
+      setSelectedBill(null)
+    }
+  }, [routeParams.id])
+
+  // Open the bill detail based on the URL once bills are loaded
+  useEffect(() => {
+    const urlBillId = routeParams.billId ? Number(routeParams.billId) : null
+    if (!urlBillId) {
+      setSelectedBill(null)
+      return
+    }
+    const found = bills.find((b) => b.bill_id === urlBillId)
+    if (found) setSelectedBill(found)
+  }, [routeParams.billId, bills])
+
+  const openBill = (bill) => {
+    navigate(`/admin/customer/${routeParams.id}/bill/${bill.bill_id}`)
+  }
+
+  const closeBill = () => {
+    navigate(`/admin/customer/${routeParams.id}`)
   }
 
   // Show bills detail view if customer selected
@@ -268,10 +304,10 @@ const CustomerManagement = () => {
 
         {/* Customer Header */}
         <div>
-          <h1 className="text-3xl font-bold text-foreground">{selectedCustomer.name}</h1>
+          <h1 className="text-3xl font-bold text-foreground">{customerDetail?.name || selectedCustomer.name || 'Customer'}</h1>
           <div className="flex items-center gap-2 text-muted-foreground mt-1">
             <Phone className="h-4 w-4" />
-            {selectedCustomer.phone}
+            {customerDetail?.phone || selectedCustomer.phone || ''}
           </div>
         </div>
 
@@ -326,7 +362,7 @@ const CustomerManagement = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setSelectedBill(null)}
+                  onClick={closeBill}
                   className="h-8 w-8 p-0"
                 >
                   <X className="h-4 w-4" />
@@ -474,7 +510,7 @@ const CustomerManagement = () => {
                   <Card
                     key={bill.bill_id}
                     className="p-4 cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => setSelectedBill(bill)}
+                    onClick={() => openBill(bill)}
                   >
                     <div className="flex items-center justify-between">
                       <div>

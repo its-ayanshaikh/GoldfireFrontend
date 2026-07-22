@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams } from "react-router-dom"
 import { Building2, ChevronRight, Check } from "lucide-react"
 import CategorySelection from "./CategorySelection"
 import SubcategorySelection from "./SubcategorySelection"
@@ -10,7 +11,11 @@ import GlassTypeSelection from "./GlassTypeSelection"
 import TypeSelection from "./TypeSelection"
 import ProductForm from "./ProductForm"
 
+const WIZARD_STORAGE_KEY = 'productAddWizard'
+
 export default function ProductSteps({ initialData = null, onClose = null, onSaved = null, editMode = false }) {
+    const [searchParams, setSearchParams] = useSearchParams()
+    const hydratedRef = useRef(false)
     const [currentStep, setCurrentStep] = useState(1)
     const [unlockedStep, setUnlockedStep] = useState(1)
 
@@ -141,6 +146,67 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
 
     const updateProductData = (data) => {
         setProductData(prev => ({ ...prev, ...data }))
+    }
+
+    // -------------------------------------------------------------
+    // Restore the wizard (add mode) from sessionStorage on mount so a
+    // page refresh keeps the same step + entered data. The step number is
+    // also mirrored in the URL (?step=N) for visibility / browser back.
+    // -------------------------------------------------------------
+    useEffect(() => {
+        if (editMode) {
+            hydratedRef.current = true
+            return
+        }
+        try {
+            const saved = sessionStorage.getItem(WIZARD_STORAGE_KEY)
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                if (parsed.productData) setProductData(parsed.productData)
+                const savedUnlocked = parsed.unlockedStep || 1
+                setUnlockedStep(savedUnlocked)
+                const urlStep = parseInt(searchParams.get('step'))
+                const target = urlStep || parsed.currentStep || 1
+                setCurrentStep(Math.min(Math.max(target, 1), savedUnlocked))
+            }
+        } catch (e) {
+            console.warn('Wizard restore failed:', e)
+        }
+        hydratedRef.current = true
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    // Persist wizard state + reflect current step in the URL
+    useEffect(() => {
+        if (editMode || !hydratedRef.current) return
+        try {
+            sessionStorage.setItem(
+                WIZARD_STORAGE_KEY,
+                JSON.stringify({ productData, currentStep, unlockedStep })
+            )
+        } catch (e) {
+            // ignore quota / serialization errors
+        }
+        const currentUrlStep = searchParams.get('step')
+        if (String(currentStep) !== currentUrlStep) {
+            const sp = new URLSearchParams(searchParams)
+            sp.set('step', String(currentStep))
+            setSearchParams(sp, { replace: true })
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [productData, currentStep, unlockedStep, editMode])
+
+    const clearWizardPersistence = () => {
+        try {
+            sessionStorage.removeItem(WIZARD_STORAGE_KEY)
+        } catch (e) {
+            // ignore
+        }
+        const sp = new URLSearchParams(searchParams)
+        if (sp.has('step')) {
+            sp.delete('step')
+            setSearchParams(sp, { replace: true })
+        }
     }
 
     const clearSubsequentData = (fromStep) => {
@@ -343,6 +409,7 @@ export default function ProductSteps({ initialData = null, onClose = null, onSav
         })
         setCurrentStep(1)
         setUnlockedStep(1)
+        clearWizardPersistence()
     }
 
     const renderCurrentStep = () => {

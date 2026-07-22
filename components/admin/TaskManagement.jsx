@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
+import { useParams, useNavigate } from "react-router-dom"
 import { useToast } from "../../hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
 import { Button } from "../ui/button"
@@ -43,6 +44,8 @@ import {
 
 const TaskManagement = () => {
   const { toast } = useToast()
+  const routeParams = useParams()
+  const navigate = useNavigate()
   const [currentSubView, setCurrentSubView] = useState("task-submissions") // Task Submissions selected by default
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedEmployee, setSelectedEmployee] = useState("all")
@@ -178,6 +181,21 @@ const TaskManagement = () => {
   const [totalCount, setTotalCount] = useState(0)
   const [nextPage, setNextPage] = useState(null)
   const [previousPage, setPreviousPage] = useState(null)
+
+  // ---- Sync the open task view dialog with the URL (/admin/task/:id) ----
+  useEffect(() => {
+    const urlTaskId = routeParams.id ? Number(routeParams.id) : null
+    if (!urlTaskId) {
+      setIsViewDialogOpen(false)
+      return
+    }
+    const found = tasks.find((t) => t.id === urlTaskId)
+    if (found) {
+      setCurrentSubView("task-list")
+      setSelectedTask(found)
+      setIsViewDialogOpen(true)
+    }
+  }, [routeParams.id, tasks])
 
   // Fetch tasks from API with filters
   useEffect(() => {
@@ -1313,10 +1331,7 @@ const TaskManagement = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => {
-                                    setSelectedTask(task)
-                                    setIsViewDialogOpen(true)
-                                  }}
+                                  onClick={() => navigate(`/admin/task/${task.id}`)}
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
@@ -1559,7 +1574,7 @@ const TaskManagement = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+      <Dialog open={isViewDialogOpen} onOpenChange={(open) => { if (!open) navigate('/admin/task'); setIsViewDialogOpen(open) }}>
         <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-y-auto">
           {selectedTask && (
             <>

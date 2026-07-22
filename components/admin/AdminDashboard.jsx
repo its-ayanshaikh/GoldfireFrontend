@@ -178,15 +178,22 @@ const AdminDashboard = ({ view, user, onLogout }) => {
     const mappedView = pathToViewMap[location.pathname] || 'dashboard'
     setCurrentView(mappedView)
 
-    // Handle dynamic routes like /admin/product/edit/123 or /admin/product/123 or /admin/task/456
+    // Handle dynamic (id-based) routes. Detail views are owned by their list
+    // component, which reads the :id from the URL and opens the detail itself.
     if (location.pathname.match(/\/admin\/product\/edit\/\d+/)) {
       setCurrentView('product-edit')
     } else if (location.pathname.match(/\/admin\/product\/\d+/)) {
-      setCurrentView('product-view')
+      setCurrentView('product-list')
     } else if (location.pathname.match(/\/admin\/purchase\/edit\/\d+/)) {
       setCurrentView('purchase-add')
     } else if (location.pathname.match(/\/admin\/task\/\d+/)) {
-      setCurrentView('task-view')
+      setCurrentView('task-management')
+    } else if (location.pathname.match(/\/admin\/customer\/\d+/)) {
+      setCurrentView('customer-management')
+    } else if (location.pathname.match(/\/admin\/attendance\/\d+/)) {
+      setCurrentView('attendance-system')
+    } else if (location.pathname.match(/\/admin\/bill\/\d+/)) {
+      setCurrentView('bills-management')
     }
 
     // Reset customer list state

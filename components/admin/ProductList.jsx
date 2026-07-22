@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog"
 import { Separator } from "../ui/separator"
 import { useToast } from "../../hooks/use-toast"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,7 @@ const currency = (n) => `₹${Number(n || 0).toLocaleString()}`
 export default function ProductList() {
   const { toast } = useToast()
   const navigate = useNavigate()
+  const routeParams = useParams()
 
   // State for API data
   const [products, setProducts] = useState([])
@@ -130,6 +131,26 @@ export default function ProductList() {
       setProductsLoading(false)
     }
   }, [query, selectedCategory, selectedBranch, categories, branches])
+
+  // ---- Sync the open product view modal with the URL (/admin/product/:id) ----
+  useEffect(() => {
+    const urlProductId = routeParams.id ? Number(routeParams.id) : null
+    if (!urlProductId) {
+      setSelectedProduct(null)
+      setSelectedVariantProduct(null)
+      return
+    }
+    const found = products.find((p) => p.id === urlProductId)
+    if (found) {
+      if (found.is_variant) {
+        setSelectedVariantProduct(found)
+        setSelectedProduct(null)
+      } else {
+        setSelectedProduct(found)
+        setSelectedVariantProduct(null)
+      }
+    }
+  }, [routeParams.id, products])
 
   // Initial fetch and refetch on filter changes
   useEffect(() => {
@@ -478,13 +499,7 @@ export default function ProductList() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => {
-                                if (p.is_variant) {
-                                  setSelectedVariantProduct(p)
-                                } else {
-                                  setSelectedProduct(p)
-                                }
-                              }}
+                              onClick={() => navigate(`/admin/product/${p.id}`)}
                             >
                               <Eye className="w-4 h-4 mr-1" />
                               View
@@ -619,6 +634,7 @@ export default function ProductList() {
         if (!open) {
           setSelectedVariantProduct(null)
           setVariantSearch("")
+          if (routeParams.id) navigate('/admin/product')
         }
       }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -738,7 +754,7 @@ export default function ProductList() {
       </Dialog>
 
       {/* Non-Variant Product Modal */}
-      <Dialog open={!!selectedProduct} onOpenChange={(open) => !open && setSelectedProduct(null)}>
+      <Dialog open={!!selectedProduct} onOpenChange={(open) => { if (!open) { setSelectedProduct(null); if (routeParams.id) navigate('/admin/product') } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>

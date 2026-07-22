@@ -12,9 +12,12 @@ import { Clock, Search, Filter, ArrowLeft, Calendar, CheckCircle, XCircle, Alert
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog"
 import { Textarea } from "../ui/textarea"
 import { useToast } from "../../hooks/use-toast"
+import { useParams, useNavigate } from "react-router-dom"
 
 const EnhancedAttendanceSystem = () => {
   const { toast } = useToast()
+  const routeParams = useParams()
+  const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState("")
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const debounceTimer = useRef(null)
@@ -381,6 +384,16 @@ const EnhancedAttendanceSystem = () => {
       const sortedAttendance = transformedAttendance.sort((a, b) => new Date(b.date) - new Date(a.date))
       setAttendanceHistory(sortedAttendance)
 
+      // On refresh we may only have the id; enrich the header from the response
+      if (data && data.employee) {
+        setSelectedEmployee((prev) => {
+          if (prev && (!prev.name || prev.name === '')) {
+            return { ...prev, name: data.employee.name, branch: data.employee.branch }
+          }
+          return prev
+        })
+      }
+
     } catch (error) {
       console.error('Error fetching employee attendance:', error)
       setAttendanceError(error.message)
@@ -390,11 +403,32 @@ const EnhancedAttendanceSystem = () => {
     }
   }
 
-  // Handle employee selection and fetch attendance
+  // Handle employee selection — URL drives the detail view (refresh-safe)
   const handleEmployeeSelect = (employee) => {
-    setSelectedEmployee(employee)
-    fetchEmployeeAttendance(employee.id, selectedMonth, selectedYear)
+    navigate(`/admin/attendance/${employee.id}`)
   }
+
+  // ---- Sync selected employee with the URL (/admin/attendance/:id) ----
+  useEffect(() => {
+    const urlId = routeParams.id ? Number(routeParams.id) : null
+    if (!urlId) {
+      setSelectedEmployee(null)
+      return
+    }
+    const found = employees.find((e) => e.id === urlId)
+    setSelectedEmployee((prev) => {
+      if (prev && prev.id === urlId) return prev
+      return found || { id: urlId, name: '', role: '', branch: '' }
+    })
+  }, [routeParams.id, employees])
+
+  // Fetch attendance whenever the selected employee changes
+  useEffect(() => {
+    if (selectedEmployee?.id) {
+      fetchEmployeeAttendance(selectedEmployee.id, selectedMonth, selectedYear)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEmployee?.id])
 
   // Handle month selection change
   const handleMonthChange = (month) => {
@@ -729,7 +763,10 @@ const EnhancedAttendanceSystem = () => {
   // Handle update attendance button click
   const handleUpdateAttendanceClick = async (e, employee) => {
     e.stopPropagation() // Prevent card click
-    
+
+    // Reflect the detail in the URL (refresh-safe)
+    navigate(`/admin/attendance/${employee.id}`)
+
     // Select employee first
     setSelectedEmployee(employee)
     
@@ -1255,7 +1292,7 @@ const EnhancedAttendanceSystem = () => {
         <>
           <div className="mb-4 px-2 sm:px-0">
             <div className="flex items-center gap-4 mb-4">
-              <Button variant="outline" onClick={() => setSelectedEmployee(null)} className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => navigate('/admin/attendance')} className="flex items-center gap-2">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Employee List
               </Button>
