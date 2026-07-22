@@ -230,6 +230,7 @@ const AdminDashboard = ({ view, user, onLogout }) => {
   const topSellingProducts = dashboardData?.top_selling_products || []
   const customerAnalytics = dashboardData?.customer_analytics || {}
   const employeeAnalytics = dashboardData?.employee_analytics || {}
+  const todaySales = dashboardData?.today_sales || { total_bills: 0, total_amount: 0, sales: [] }
 
   // Chart colors for products
   const productColors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
@@ -596,7 +597,7 @@ const AdminDashboard = ({ view, user, onLogout }) => {
               </div>
             )}
 
-            {!loading && <div className="space-y-8">
+            {!loading && <div className="flex flex-col gap-8">
               {/* Overview Stats */}
               {/* Mobile: all 4 stats fit in ONE line (no scroll), very compact */}
               <div className="sm:hidden grid grid-cols-4 gap-1.5">
@@ -636,8 +637,65 @@ const AdminDashboard = ({ view, user, onLogout }) => {
                 })}
               </div>
 
-              {/* Sales Analytics Section */}
+              {/* Today's Sales Section */}
               <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-4">Today's Sales</h2>
+
+                {/* Compact summary cards in a single line */}
+                <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-4">
+                  <Card className="border-l-4 border-l-blue-500">
+                    <CardContent className="p-3 sm:p-4 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm text-muted-foreground">Total Bills</p>
+                        <p className="text-xl sm:text-2xl font-bold text-foreground">{todaySales.total_bills}</p>
+                      </div>
+                      <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500 shrink-0" />
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-green-500">
+                    <CardContent className="p-3 sm:p-4 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm text-muted-foreground">Total Sales</p>
+                        <p className="text-xl sm:text-2xl font-bold text-foreground truncate">₹{(todaySales.total_amount || 0).toLocaleString()}</p>
+                      </div>
+                      <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-500 shrink-0" />
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Fixed-height scrollable list of today's sales */}
+                <Card>
+                  <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
+                    <CardTitle className="text-lg sm:text-xl">Recent Sales</CardTitle>
+                    <CardDescription className="text-sm">Today's bills — customer &amp; amount (returns excluded)</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 sm:p-6 pt-0">
+                    <div className="h-[320px] overflow-y-auto pr-1 space-y-2">
+                      {todaySales.sales.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                          No sales today yet
+                        </div>
+                      ) : todaySales.sales.map((sale) => (
+                        <div
+                          key={sale.bill_id}
+                          className="flex items-center justify-between gap-3 border border-border rounded-lg px-3 py-2.5 hover:bg-accent transition-colors"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium text-foreground text-sm truncate">{sale.customer_name}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {sale.bill_number || '—'} · {sale.time}
+                            </div>
+                          </div>
+                          <div className="text-base font-bold text-foreground shrink-0">₹{(sale.amount || 0).toLocaleString()}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Sales Analytics Section (moved to bottom via order-last) */}
+              <div className="order-last">
                 <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-4">Sales Analytics</h2>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 mb-6">
                   {/* Monthly Revenue Trend */}
