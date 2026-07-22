@@ -419,10 +419,14 @@ export default function PurchaseAdd() {
   // Products are fetched with server-side search
   const filteredProducts = products
 
-  // Filter variants based on search
-  const filteredVariants = variants.filter(v => 
-    v.name.toLowerCase().includes(variantSearch.toLowerCase())
-  )
+  // Filter variants based on search (matches model / subbrand / price)
+  const filteredVariants = variants.filter(v => {
+    const q = variantSearch.toLowerCase().trim()
+    if (!q) return true
+    const nameMatch = (v.name || "").toLowerCase().includes(q)
+    const priceMatch = v.selling_price != null && String(v.selling_price).includes(q)
+    return nameMatch || priceMatch
+  })
 
   // Handle keyboard navigation for product dropdown
   const handleProductKeyDown = (e) => {

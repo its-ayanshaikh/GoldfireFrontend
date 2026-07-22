@@ -220,7 +220,7 @@ export default function PurchaseList() {
   const handleDelete = async (id) => {
     try {
       const token = localStorage.getItem("access_token")
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/vendor/purchase/${id}/`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/vendor/purchase/${id}/delete/`, {
         method: "DELETE",
         headers: {
           "Authorization": `Bearer ${token}`,
