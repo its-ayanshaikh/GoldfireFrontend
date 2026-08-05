@@ -242,9 +242,15 @@ const AttendancePage = ({ user }) => {
   // -----------------------------------------------------------
   const workingHoursPerDay = Number(attendanceHistory[0]?.employee?.working_hours) || 8
   const presentRecords = attendanceHistory.filter((r) => r.status === "present")
+  const absentRecords = attendanceHistory.filter((r) => r.status === "absent")
   const workedDays = presentRecords.length
+  const absentDays = absentRecords.length
   const totalWorkedHours = presentRecords.reduce((sum, r) => sum + (parseFloat(r.workHours) || 0), 0)
-  const requiredSoFarHours = workedDays * workingHoursPerDay
+  // Required = every expected working day so far (present + absent). Leaves are
+  // excluded (approved off). Absent days contribute 0 worked hours, so they
+  // push the balance into minus by their full required hours.
+  const expectedDays = workedDays + absentDays
+  const requiredSoFarHours = expectedDays * workingHoursPerDay
   const netHours = totalWorkedHours - requiredSoFarHours // + = ahead, - = behind
   const isAhead = netHours >= 0
   const now = new Date()
@@ -674,7 +680,7 @@ const AttendancePage = ({ user }) => {
               <div className="rounded-lg border border-border p-2.5 text-center">
                 <p className="text-[10px] text-muted-foreground">Required (so far)</p>
                 <p className="text-sm font-bold text-foreground">{requiredSoFarHours.toFixed(1)}h</p>
-                <p className="text-[10px] text-muted-foreground">{workingHoursPerDay}h/day</p>
+                <p className="text-[10px] text-muted-foreground">{expectedDays} day{expectedDays !== 1 ? 's' : ''}</p>
               </div>
               <div className={`rounded-lg border p-2.5 text-center ${isAhead ? 'border-green-200 bg-green-50/60 dark:bg-green-950/20' : 'border-red-200 bg-red-50/60 dark:bg-red-950/20'}`}>
                 <p className="text-[10px] text-muted-foreground">{isAhead ? 'Ahead (plus)' : 'Behind (minus)'}</p>
@@ -687,6 +693,9 @@ const AttendancePage = ({ user }) => {
             <p className="text-[11px] text-muted-foreground mt-2 text-center">
               Month target: <span className="font-medium text-foreground">{monthTargetHours.toFixed(0)}h</span>
               {' '}({daysInMonth} days × {workingHoursPerDay}h)
+              {absentDays > 0 && (
+                <> · <span className="text-red-600 font-medium">{absentDays} absent day{absentDays !== 1 ? 's' : ''}</span> counted as minus</>
+              )}
             </p>
           </CardContent>
         </Card>
