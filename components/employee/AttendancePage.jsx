@@ -237,6 +237,21 @@ const AttendancePage = ({ user }) => {
 
   const leaveStatusInfo = getLeaveStatusInfo()
 
+  // -----------------------------------------------------------
+  // Monthly working-hours summary (plus / minus tracker)
+  // -----------------------------------------------------------
+  const workingHoursPerDay = Number(attendanceHistory[0]?.employee?.working_hours) || 8
+  const presentRecords = attendanceHistory.filter((r) => r.status === "present")
+  const workedDays = presentRecords.length
+  const totalWorkedHours = presentRecords.reduce((sum, r) => sum + (parseFloat(r.workHours) || 0), 0)
+  const requiredSoFarHours = workedDays * workingHoursPerDay
+  const netHours = totalWorkedHours - requiredSoFarHours // + = ahead, - = behind
+  const isAhead = netHours >= 0
+  const now = new Date()
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const monthTargetHours = daysInMonth * workingHoursPerDay
+  const fmtHrs = (n) => `${Math.abs(n).toFixed(1)}h`
+
   // Function to get current location
   const getCurrentLocation = () => {
     return new Promise((resolve, reject) => {
@@ -639,6 +654,41 @@ const AttendancePage = ({ user }) => {
               )}
             </div>
           </CardHeader>
+        </Card>
+
+        {/* Monthly Hours Summary Card */}
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock className="w-4 h-4" />
+              This Month's Hours
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-lg border border-border p-2.5 text-center">
+                <p className="text-[10px] text-muted-foreground">Worked</p>
+                <p className="text-sm font-bold text-foreground">{totalWorkedHours.toFixed(1)}h</p>
+                <p className="text-[10px] text-muted-foreground">{workedDays} day{workedDays !== 1 ? 's' : ''}</p>
+              </div>
+              <div className="rounded-lg border border-border p-2.5 text-center">
+                <p className="text-[10px] text-muted-foreground">Required (so far)</p>
+                <p className="text-sm font-bold text-foreground">{requiredSoFarHours.toFixed(1)}h</p>
+                <p className="text-[10px] text-muted-foreground">{workingHoursPerDay}h/day</p>
+              </div>
+              <div className={`rounded-lg border p-2.5 text-center ${isAhead ? 'border-green-200 bg-green-50/60 dark:bg-green-950/20' : 'border-red-200 bg-red-50/60 dark:bg-red-950/20'}`}>
+                <p className="text-[10px] text-muted-foreground">{isAhead ? 'Ahead (plus)' : 'Behind (minus)'}</p>
+                <p className={`text-sm font-bold ${isAhead ? 'text-green-600' : 'text-red-600'}`}>
+                  {isAhead ? '+' : '−'}{fmtHrs(netHours)}
+                </p>
+                <p className="text-[10px] text-muted-foreground">so far</p>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2 text-center">
+              Month target: <span className="font-medium text-foreground">{monthTargetHours.toFixed(0)}h</span>
+              {' '}({daysInMonth} days × {workingHoursPerDay}h)
+            </p>
+          </CardContent>
         </Card>
 
         {/* Attendance History Card */}

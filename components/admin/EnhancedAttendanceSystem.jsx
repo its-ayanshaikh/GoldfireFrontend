@@ -1081,6 +1081,39 @@ const EnhancedAttendanceSystem = () => {
             />
           </div>
         )}
+
+        {/* Reject Late Request - Penalty Dialog (list view) */}
+        <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Reject Late Request</DialogTitle>
+              <DialogDescription>
+                {rejectTarget ? `Add a penalty for ${rejectTarget.name}'s late arrival. This amount will be deducted from this month's salary.` : ''}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 py-2">
+              <Label htmlFor="penalty-amount-list">Penalty Amount (₹)</Label>
+              <Input
+                id="penalty-amount-list"
+                type="number"
+                min="0"
+                placeholder="e.g. 100"
+                value={penaltyInput}
+                onChange={(e) => setPenaltyInput(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRejectDialogOpen(false)}>Cancel</Button>
+              <Button
+                variant="destructive"
+                onClick={confirmReject}
+                disabled={reviewingId === rejectTarget?.id}
+              >
+                {reviewingId === rejectTarget?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reject & Deduct'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
