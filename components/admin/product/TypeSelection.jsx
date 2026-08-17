@@ -281,6 +281,30 @@ export default function TypeSelection({
             </Button>
           </div>
         </Card>
+
+        {/* Modal must be rendered here too, otherwise "Add Type" from the
+            empty state can't open it */}
+        <OverlayModal
+          open={modalState.open}
+          title={
+            modalState.type === "add"
+              ? "Add Type"
+              : modalState.type === "edit"
+                ? "Edit Type"
+                : "Delete Type"
+          }
+          value={modalState.value}
+          onChange={(val) => setModalState(prev => ({ ...prev, value: val }))}
+          onClose={closeModal}
+          onSave={handleModalSave}
+          placeholder={
+            modalState.type === "delete"
+              ? `Are you sure you want to delete "${modalState.value}"?`
+              : "Enter type name"
+          }
+          isDeleteMode={modalState.type === "delete"}
+          isLoading={modalState.isLoading}
+        />
       </div>
     )
   }
